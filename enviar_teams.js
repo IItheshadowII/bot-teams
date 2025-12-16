@@ -291,6 +291,17 @@ const finalMessage = messageToSend || "🤖 Hola Eze, soy el bot probando la iny
 
   } catch (error) {
     console.error("❌ Error:", error);
+    
+    // --- AGREGAR ESTO PARA VER QUÉ PASÓ ---
+    try {
+        const screenshotPath = '/home/pptruser/teams_session/error_debug.png';
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        console.log(`📸 FOTO TOMADA: Bajala de tu servidor para ver qué pasó: ${screenshotPath}`);
+    } catch (shotError) {
+        console.error("No pude sacar la foto:", shotError);
+    }
+    // --------------------------------------
+
   } finally {
     await browser.close();
   }
