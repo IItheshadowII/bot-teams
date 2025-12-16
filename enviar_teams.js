@@ -10,6 +10,9 @@ const USER_PASS = process.env.TEAMS_PASSWORD;
 // En tu caso, el nombre exacto que se ve en la barra lateral
 const GROUP_NAME = process.env.TEAMS_GROUP_NAME || "AnyDesk Management"; 
 
+// Ruta para screenshots (fuera del contenedor, en el host)
+const SCREENSHOT_PATH = '/home/ebanega';
+
 // Argumentos desde n8n/consola
 const args = process.argv.slice(2);
 const anydeskID = args[0] || "ID_DESCONOCIDO";
@@ -59,7 +62,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             console.log('📧 Ingresando email...');
             await page.waitForSelector('input[type="email"]', { timeout: 30000 });
             await page.type('input[type="email"]', USER_EMAIL, { delay: 50 });
-            await page.screenshot({ path: '/app/debug_01_email_entered.png' });
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_01_email_entered.png` });
             console.log('✅ Email ingresado, presionando Enter...');
             await page.keyboard.press('Enter');
             await new Promise(r => setTimeout(r, 3000));
@@ -71,7 +74,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
                 await page.waitForSelector('input[type="password"]', { timeout: 30000 });
                 console.log('✅ Campo de contraseña encontrado');
                 await page.type('input[type="password"]', USER_PASS, { delay: 50 });
-                await page.screenshot({ path: '/app/debug_02_password_entered.png' });
+                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_02_password_entered.png` });
                 console.log('✅ Contraseña ingresada, presionando Enter...');
                 await page.keyboard.press('Enter');
             } catch (e) {
@@ -79,7 +82,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
                 console.log('📍 URL actual:', page.url());
                 const html = await page.content();
                 console.log('📄 HTML (primeros 1000 chars):', html.substring(0, 1000));
-                await page.screenshot({ path: '/app/debug_password_not_found.png' });
+                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_password_not_found.png` });
                 
                 // Buscar todos los inputs en la página
                 const inputs = await page.evaluate(() => {
@@ -119,7 +122,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
         // Verificación final: Si aún está en /free/, algo falló
         currentUrl = page.url();
         if (currentUrl.includes('/free/')) {
-            await page.screenshot({ path: '/app/stuck_in_free.png' });
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/stuck_in_free.png` });
             throw new Error('Teams sigue redirigiendo a /free/ después del login. La sesión no persiste o las credenciales son incorrectas. Ver screenshot stuck_in_free.png');
         }
 
@@ -139,7 +142,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             console.log('⚠️ No se detectó la interfaz esperada. URL actual:', page.url());
             const html = await page.content();
             console.log('📄 HTML snippet (primeros 500 chars):', html.substring(0, 500));
-            await page.screenshot({ path: '/app/debug_no_interface.png' });
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_no_interface.png` });
             throw new Error('Teams no cargó correctamente. Ver screenshot debug_no_interface.png');
         });
 
@@ -173,7 +176,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             await target.click();
             await new Promise(r => setTimeout(r, 2000)); // Esperar que abra
         } else {
-            await page.screenshot({ path: '/app/debug_chat_not_found.png' });
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_chat_not_found.png` });
             throw new Error(`No encontré el chat "${GROUP_NAME}" en la lista. Ver screenshot debug_chat_not_found.png`);
         }
 
@@ -196,7 +199,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
 
     } catch (error) {
         console.error('❌ ERROR:', error.message);
-        await page.screenshot({ path: '/app/error_debug_teams.png' });
+        await page.screenshot({ path: `${SCREENSHOT_PATH}/error_debug_teams.png` });
     } finally {
         await browser.close();
     }
