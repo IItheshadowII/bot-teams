@@ -32,30 +32,57 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
     try {
         // 1. Ir a la home de Teams Personal
         console.log('🌐 Entrando a Teams (Live)...');
-        await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2' });
+        await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
 
         // -----------------------------------------------------
         // 🔐 LOGIN (Soporta Live.com y Microsoft)
         // -----------------------------------------------------
-        if (page.url().includes('login.') || page.url().includes('signin')) {
-            console.log('🔒 Detectado Login. Iniciando...');
+        // Detectar si redirige a /free/ (no autenticado) o a login
+        const currentUrl = page.url();
+        console.log('📍 URL después de navegar:', currentUrl);
+        
+        if (currentUrl.includes('/free/') || currentUrl.includes('login.') || currentUrl.includes('signin')) {
+            console.log('🔒 No está autenticado. Iniciando login...');
+            
+            // Si está en /free/, ir directo a login
+            if (currentUrl.includes('/free/')) {
+                console.log('↪️ Redirigiendo a login...');
+                await page.goto('https://login.live.com/login.srf?wa=wsignin1.0&rpsnv=150&ct=1702684800&rver=7.0.6738.0&wp=MBI_SSL&wreply=https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
+            }
             
             // Email
-            await page.waitForSelector('input[type="email"]');
+            console.log('📧 Ingresando email...');
+            await page.waitForSelector('input[type="email"]', { timeout: 30000 });
             await page.type('input[type="email"]', USER_EMAIL, { delay: 50 });
             await page.keyboard.press('Enter');
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 3000));
 
             // Password
-            await page.waitForSelector('input[type="password"]');
+            console.log('🔑 Ingresando contraseña...');
+            await page.waitForSelector('input[type="password"]', { timeout: 30000 });
             await page.type('input[type="password"]', USER_PASS, { delay: 50 });
             await page.keyboard.press('Enter');
             
             // "Mantener sesión"
+            console.log('💾 Guardando sesión...');
             try {
-                await page.waitForSelector('#idSIButton9', { timeout: 5000 });
+                await page.waitForSelector('#idSIButton9', { timeout: 10000 });
                 await page.click('#idSIButton9');
-            } catch (e) { console.log('ℹ️ Saltando confirmación de sesión.'); }
+            } catch (e) { 
+                console.log('ℹ️ No apareció confirmación de sesión (puede ser normal).'); 
+            }
+            
+            // Esperar a que redirija a Teams después del login
+            console.log('⏳ Esperando redirección a Teams...');
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {
+                console.log('⚠️ Timeout esperando navegación, continuando...');
+            });
+            
+            // Esperar extra para que Teams cargue completamente
+            await new Promise(r => setTimeout(r, 5000));
+            console.log('✅ Login completado. URL actual:', page.url());
+        } else {
+            console.log('✅ Ya estaba autenticado.');
         }
 
         // -----------------------------------------------------
