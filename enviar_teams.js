@@ -204,7 +204,21 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // 6. Buscar input de mensaje usando evaluación del DOM
+        // 6. Intentar activar el campo de texto presionando Tab o haciendo clic en el centro
+        console.log('⌨️ Intentando activar campo de texto con Tab...');
+        await page.keyboard.press('Tab');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Hacer clic en el centro-abajo de la página (donde suele estar el input)
+        console.log('🖱️ Haciendo clic en el área del input (centro-abajo)...');
+        const dimensions = await page.evaluate(() => ({
+            width: window.innerWidth,
+            height: window.innerHeight
+        }));
+        await page.mouse.click(dimensions.width / 2, dimensions.height - 100);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // 7. Buscar input de mensaje usando evaluación del DOM
         console.log('📝 Buscando campo de texto...');
         
         // Screenshot de debug
@@ -269,29 +283,77 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         });
         
         if (!inputFound) {
-            // Listar todos los contenteditable para debug
+            // Listar todos los contenteditable para debug y buscar más info
             const debugInfo = await page.evaluate(() => {
                 const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
-                return editables.map(el => ({
-                    tag: el.tagName,
-                    role: el.getAttribute('role'),
-                    class: el.className,
-                    visible: el.offsetWidth > 0 && el.offsetHeight > 0
-                }));
+                const textboxes = Array.from(document.querySelectorAll('[role="textbox"]'));
+                const inputs = Array.from(document.querySelectorAll('input, textarea'));
+                const iframes = Array.from(document.querySelectorAll('iframe'));
+                
+                return {
+                    contenteditable: editables.map(el => ({
+                        tag: el.tagName,
+                        role: el.getAttribute('role'),
+                        class: el.className,
+                        visible: el.offsetWidth > 0 && el.offsetHeight > 0
+                    })),
+                    textboxes: textboxes.map(el => ({
+                        tag: el.tagName,
+                        class: el.className,
+                        visible: el.offsetWidth > 0 && el.offsetHeight > 0
+                    })),
+                    inputs: inputs.map(el => ({
+                        tag: el.tagName,
+                        type: el.type,
+                        placeholder: el.placeholder,
+                        visible: el.offsetWidth > 0 && el.offsetHeight > 0
+                    })),
+                    iframes: iframes.length,
+                    url: window.location.href
+                };
             });
-            console.log('📋 Elementos contenteditable encontrados:', JSON.stringify(debugInfo, null, 2));
+            console.log('📋 Debug completo:', JSON.stringify(debugInfo, null, 2));
+            
+            // Intentar en iframe si existe
+            const frames = page.frames();
+            console.log(`🔍 Frames encontrados: ${frames.length}`);
+            
+            for (let frame of frames) {
+                try {
+                    const frameInputFound = await frame.evaluate(() => {
+                        const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+                        for (let elem of editables) {
+                            const rect = elem.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                elem.click();
+                                elem.focus();
+                                return true;
+                            }
+                        }
+                        return false;
+                    });
+                    
+                    if (frameInputFound) {
+                        console.log('✅ Input encontrado en iframe');
+                        break;
+                    }
+                } catch (e) {
+                    // Algunos iframes pueden tener CORS o estar vacíos
+                }
+            }
+            
             throw new Error('❌ No se encontró el campo de texto con ningún selector');
         }
         
         console.log('✅ Input encontrado y enfocado');
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 7. Escribir mensaje usando keyboard
+        // 8. Escribir mensaje usando keyboard
         console.log('✍️ Escribiendo mensaje...');
         await page.keyboard.type(mensaje, { delay: 20 });
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 8. Enviar usando Enter o buscando el botón
+        // 9. Enviar usando Enter o buscando el botón
         console.log('🚀 Enviando mensaje...');
         
         // Intentar con Enter primero
