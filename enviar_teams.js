@@ -16,7 +16,7 @@ if (!messageToSend) {
   try {
     console.log(`Iniciando navegador con sesión en: ${SESSION_DIR}`);
     browser = await puppeteer.launch({
-      headless: "new", 
+      headless: "false", 
       userDataDir: SESSION_DIR, // <-- Usa el volumen persistente
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
