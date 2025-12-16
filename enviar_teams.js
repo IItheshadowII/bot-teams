@@ -32,7 +32,7 @@ const SCREENSHOT_PATH = '/home/pptruser/screenshots';
 // 📨 FUNCIÓN PARA ENVIAR MENSAJE A TEAMS
 // ==========================================
 async function enviarMensajeTeams(anydeskID, pcName) {
-    const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 ID: ${anydeskID}\n\n👉 Por favor agregar a la lista.`;
+    const mensaje = `Equipo: ${pcName} - AnyDesk ID: ${anydeskID} - Por favor agregar a la lista.`;
     
     console.log(`🤖 INICIANDO BOT (Grupo: "${GROUP_NAME}")...`);
     
