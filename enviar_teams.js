@@ -84,24 +84,46 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             // Verificar si estamos en página FIDO (sin contraseña)
             const currentUrlAfterEmail = page.url();
             if (currentUrlAfterEmail.includes('fido/get')) {
-                console.log('⚠️ Detectada página de autenticación FIDO (passkey). Volviendo a opciones tradicionales...');
-                // Hacer clic en "Atrás" o buscar opción de contraseña
+                console.log('⚠️ Detectada página de autenticación FIDO (passkey). Buscando opciones de contraseña...');
+                
+                // Esperar un poco para que la página cargue completamente
+                await new Promise(r => setTimeout(r, 2000));
+                
+                // Tomar screenshot para debug
+                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_fido_page.png` });
+                
+                // Estrategia 1: Buscar y hacer click en "Sign-in options"
                 try {
-                    const backButton = await page.waitForSelector('#idBtn_Back', { timeout: 5000 });
-                    if (backButton) {
-                        await backButton.click();
-                        console.log('✅ Click en botón Atrás');
-                        await new Promise(r => setTimeout(r, 2000));
+                    console.log('🔍 Buscando "Sign-in options"...');
+                    const signInOptions = await page.waitForSelector('#idA_PWD_SwitchToPassword, [data-value="password"], a[href*="switchView"]', { timeout: 5000 });
+                    if (signInOptions) {
+                        await signInOptions.click();
+                        console.log('✅ Click en opciones de inicio de sesión');
+                        await new Promise(r => setTimeout(r, 3000));
                     }
                 } catch (e) {
-                    console.log('⚠️ No se encontró botón Atrás, buscando opción de contraseña...');
-                    // Buscar link de "Sign in with password" u opciones alternativas
-                    const passwordLink = await page.$x("//a[contains(text(), 'password') or contains(text(), 'Password')]");
-                    if (passwordLink.length > 0) {
-                        await passwordLink[0].click();
-                        await new Promise(r => setTimeout(r, 2000));
-                    }
+                    console.log('⚠️ No encontrado con selector directo, buscando por texto...');
                 }
+                
+                // Estrategia 2: Buscar links con texto específico
+                const passwordLinks = await page.$x("//a[contains(., 'password') or contains(., 'Password') or contains(., 'sign-in option')]");
+                if (passwordLinks.length > 0) {
+                    console.log(`✅ Encontrados ${passwordLinks.length} links con "password", haciendo click en el primero...`);
+                    await passwordLinks[0].click();
+                    await new Promise(r => setTimeout(r, 3000));
+                } else {
+                    console.log('⚠️ No se encontraron links de contraseña');
+                }
+                
+                // Estrategia 3: Buscar div o span clickeable
+                const passwordDivs = await page.$x("//div[contains(., 'Use your password')] | //span[contains(., 'password')]");
+                if (passwordDivs.length > 0) {
+                    console.log('✅ Encontrado elemento con texto de contraseña, intentando click...');
+                    await passwordDivs[0].click();
+                    await new Promise(r => setTimeout(r, 3000));
+                }
+                
+                console.log('📍 URL después de buscar opciones:', page.url());
             }
             
             try {
