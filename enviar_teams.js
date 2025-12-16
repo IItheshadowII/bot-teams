@@ -1,41 +1,44 @@
+const express = require('express');
+const bodyParser = require('body-parser');
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const fs = require('fs').promises;
 puppeteer.use(StealthPlugin());
 
 // ==========================================
+// ⚙️ SERVIDOR EXPRESS PARA N8N
+// ==========================================
+const app = express();
+app.use(bodyParser.json());
+
+const PORT = process.env.PORT || 3000;
+
+// ==========================================
 // ⚙️ VARIABLES DE ENTORNO (EASYPANEL)
 // ==========================================
 const USER_EMAIL = process.env.TEAMS_EMAIL;
 const USER_PASS = process.env.TEAMS_PASSWORD;
-// En tu caso, el nombre exacto que se ve en la barra lateral
 const GROUP_NAME = process.env.TEAMS_GROUP_NAME || "AnyDesk Management"; 
-
-// Ruta para screenshots (dentro del contenedor, mapeada a host via volumen)
 const SCREENSHOT_PATH = '/home/pptruser/screenshots';
 
 // Crear directorio de screenshots si no existe
 (async () => {
     try {
         await fs.mkdir(SCREENSHOT_PATH, { recursive: true });
-    } catch (e) {
-        // Ignorar si ya existe
-    }
+    } catch (e) {}
 })();
 
-// Argumentos desde n8n/consola
-const args = process.argv.slice(2);
-const anydeskID = args[0] || "ID_DESCONOCIDO";
-const pcName = args[1] || "SIN_NOMBRE";
-
-const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 ID: ${anydeskID}\n\n👉 Por favor agregar a la lista.`;
-
-(async () => {
-    console.log(`🤖 INICIANDO BOT (Modo: Buscar "${GROUP_NAME}")...`);
+// ==========================================
+// 📨 FUNCIÓN PARA ENVIAR MENSAJE A TEAMS
+// ==========================================
+async function enviarMensajeTeams(anydeskID, pcName) {
+    const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 ID: ${anydeskID}\n\n👉 Por favor agregar a la lista.`;
+    
+    console.log(`🤖 INICIANDO BOT (Grupo: "${GROUP_NAME}")...`);
     
     const browser = await puppeteer.launch({
         headless: "new",
-        userDataDir: '/home/pptruser/teams_session', // Ruta del volumen montado en EasyPanel
+        userDataDir: '/home/pptruser/teams_session',
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080']
     });
 
@@ -43,252 +46,185 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
     await page.setViewport({ width: 1920, height: 1080 });
     
     try {
-        // 1. Ir a la home de Teams Personal
+        // 1. Ir a Teams Personal
         console.log('🌐 Entrando a Teams (Live)...');
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
-        
-        // Esperar un poco para redirecciones
-        await new Promise(r => setTimeout(r, 3000));
+        await page.waitForTimeout(3000);
 
-        // -----------------------------------------------------
-        // 🔐 LOGIN (Soporta Live.com y Microsoft)
-        // -----------------------------------------------------
-        // Detectar si redirige a /free/ (no autenticado) o a login
-        let currentUrl = page.url();
-        console.log('📍 URL después de navegar:', currentUrl);
+        // 2. Verificar autenticación
+        const currentUrl = page.url();
+        console.log(`📍 URL Actual: ${currentUrl}`);
         
-        if (currentUrl.includes('/free/') || currentUrl.includes('login.') || currentUrl.includes('signin')) {
-            console.log('🔒 No está autenticado. Iniciando login...');
+        if (currentUrl.includes('teams.live.com/v2/')) {
+            console.log('✅ Ya estaba autenticado, continuando...');
+        } else if (currentUrl.includes('login.live.com') || currentUrl.includes('login.microsoftonline.com')) {
+            console.log('🔑 Detectada página de login...');
             
-            // Si está en /free/, ir directo a login
-            if (currentUrl.includes('/free/')) {
-                console.log('↪️ Redirigiendo a login...');
-                await page.goto('https://login.live.com/login.srf?wa=wsignin1.0&rpsnv=150&ct=1702684800&rver=7.0.6738.0&wp=MBI_SSL&wreply=https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
-                await new Promise(r => setTimeout(r, 2000));
-                console.log('📍 URL después de ir a login:', page.url());
+            // Verificar FIDO
+            if (currentUrl.includes('fido/get')) {
+                console.log('⚠️ Página de FIDO detectada. Haciendo clic en "Volver"...');
+                await page.waitForSelector('#idBtn_Back', { timeout: 10000 });
+                await page.click('#idBtn_Back');
+                await page.waitForTimeout(2000);
             }
             
             // Email
-            console.log('📧 Ingresando email...');
-            await page.waitForSelector('input[type="email"]', { timeout: 30000 });
+            await page.waitForSelector('input[type="email"]', { timeout: 10000 });
             await page.type('input[type="email"]', USER_EMAIL, { delay: 50 });
-            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_01_email_entered.png` });
-            console.log('✅ Email ingresado, presionando Enter...');
-            await page.keyboard.press('Enter');
-            await new Promise(r => setTimeout(r, 3000));
-            console.log('📍 URL después de email:', page.url());
-
-            // Password - Microsoft puede mostrar página FIDO primero
-            console.log('🔑 Esperando campo de contraseña...');
+            await page.waitForTimeout(500);
+            await page.click('input[type="submit"]');
+            await page.waitForTimeout(3000);
             
-            // Verificar si estamos en página FIDO (sin contraseña)
-            let currentUrlAfterEmail = page.url();
-            if (currentUrlAfterEmail.includes('fido/get')) {
-                console.log('⚠️ Detectada página de autenticación FIDO (passkey). Haciendo click en Back...');
-                
-                // Tomar screenshot para debug
-                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_fido_page.png` });
-                
-                // Hacer click en el botón "Back"
-                try {
-                    // Buscar el botón Back por múltiples selectores
-                    const backButton = await page.waitForSelector('#idBtn_Back', { timeout: 5000 }).catch(() => null);
-                    
-                    if (backButton) {
-                        console.log('✅ Botón Back encontrado, haciendo click...');
-                        await backButton.click();
-                        // Esperar navegación o cambio de página
-                        await Promise.race([
-                            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }),
-                            new Promise(r => setTimeout(r, 4000))
-                        ]);
-                        console.log('📍 URL después de Back:', page.url());
-                    } else {
-                        console.log('⚠️ Botón Back no encontrado');
-                    }
-                } catch (e) {
-                    console.log('⚠️ Error con botón Back:', e.message);
-                }
-                
-                // Verificar si ahora hay opciones de login
-                currentUrlAfterEmail = page.url();
-                if (currentUrlAfterEmail.includes('fido/get')) {
-                    console.log('⚠️ Aún en página FIDO después de Back. Buscando opción de contraseña con evaluate...');
-                    
-                    // Buscar y hacer click en "Sign-in options" usando evaluate
-                    const clickedOption = await page.evaluate(() => {
-                        // Buscar todos los links y divs clickeables
-                        const allElements = Array.from(document.querySelectorAll('a, div[role="button"], button, span'));
-                        const signInOption = allElements.find(el => 
-                            el.textContent.toLowerCase().includes('sign-in options') ||
-                            el.textContent.toLowerCase().includes('other ways') ||
-                            el.textContent.toLowerCase().includes('use') && el.textContent.toLowerCase().includes('password')
-                        );
-                        
-                        if (signInOption) {
-                            signInOption.click();
-                            return true;
-                        }
-                        return false;
-                    });
-                    
-                    if (clickedOption) {
-                        console.log('✅ Encontrada y clickeada opción de Sign-in, esperando...');
-                        await new Promise(r => setTimeout(r, 3000));
-                    } else {
-                        console.log('⚠️ No se encontró opción de Sign-in alternatives');
-                    }
-                }
-            }
-            
+            // Password
             try {
-                await page.waitForSelector('input[type="password"]', { timeout: 30000 });
-                console.log('✅ Campo de contraseña encontrado');
+                await page.waitForSelector('input[type="password"]', { timeout: 10000 });
                 await page.type('input[type="password"]', USER_PASS, { delay: 50 });
-                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_02_password_entered.png` });
-                console.log('✅ Contraseña ingresada, presionando Enter...');
-                await page.keyboard.press('Enter');
-            } catch (e) {
-                console.error('❌ No se encontró el campo de contraseña');
-                console.log('📍 URL actual:', page.url());
-                const html = await page.content();
-                console.log('📄 HTML (primeros 1000 chars):', html.substring(0, 1000));
-                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_password_not_found.png` });
-                
-                // Buscar todos los inputs en la página
-                const inputs = await page.evaluate(() => {
-                    return Array.from(document.querySelectorAll('input')).map(input => ({
-                        type: input.type,
-                        name: input.name,
-                        id: input.id,
-                        placeholder: input.placeholder
-                    }));
-                });
-                console.log('🔍 Inputs encontrados en la página:', JSON.stringify(inputs, null, 2));
-                throw e;
+                await page.waitForTimeout(500);
+                await page.click('input[type="submit"]');
+            } catch (error) {
+                console.log('⚠️ No se encontró campo de password');
             }
+            
+            await page.waitForTimeout(5000);
             
             // "Mantener sesión"
-            console.log('💾 Guardando sesión...');
             try {
-                await page.waitForSelector('#idSIButton9', { timeout: 10000 });
-                await page.click('#idSIButton9');
-            } catch (e) { 
-                console.log('ℹ️ No apareció confirmación de sesión (puede ser normal).'); 
+                await page.waitForSelector('#idBtn_Back', { timeout: 5000 });
+                await page.click('#idBtn_Back');
+                console.log('✅ Clic en "No" para mantener sesión');
+            } catch (e) {
+                console.log('⚠️ No apareció prompt de mantener sesión');
             }
             
-            // Esperar a que redirija a Teams después del login
-            console.log('⏳ Esperando redirección a Teams...');
-            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {
-                console.log('⚠️ Timeout esperando navegación, continuando...');
-            });
+            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+        }
+        
+        // 3. Navegar a interfaz de chats
+        console.log('📍 Navegando a la interfaz de chats...');
+        await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
+        await page.waitForTimeout(5000);
+        
+        // 4. Buscar el chat usando page.evaluate()
+        console.log(`🔍 Buscando chat: "${GROUP_NAME}"...`);
+        
+        const chatClicked = await page.evaluate((groupName) => {
+            const allElements = document.querySelectorAll('*');
             
-            // Esperar extra para que Teams cargue completamente
-            await new Promise(r => setTimeout(r, 5000));
-            console.log('✅ Login completado. URL actual:', page.url());
-        } else {
-            console.log('✅ Ya estaba autenticado.');
-        }
-        
-        // Verificación final: Si aún está en /free/, algo falló
-        currentUrl = page.url();
-        if (currentUrl.includes('/free/')) {
-            await page.screenshot({ path: `${SCREENSHOT_PATH}/stuck_in_free.png` });
-            throw new Error('Teams sigue redirigiendo a /free/ después del login. La sesión no persiste o las credenciales son incorrectas. Ver screenshot stuck_in_free.png');
-        }
-
-        // -----------------------------------------------------
-        // 🔍 BUSCAR Y CLICKEAR EL GRUPO
-        // -----------------------------------------------------
-        console.log(`👀 Buscando chat: "${GROUP_NAME}"...`);
-        
-        // Esperar a que Teams cargue completamente (varios selectores posibles)
-        console.log('⏳ Esperando que cargue la interfaz de Teams...');
-        await Promise.race([
-            page.waitForSelector('div[role="listitem"]', { timeout: 60000 }),
-            page.waitForSelector('[data-tid="chat-list"]', { timeout: 60000 }),
-            page.waitForSelector('div[role="navigation"]', { timeout: 60000 }),
-            page.waitForSelector('button[aria-label*="Chat"]', { timeout: 60000 })
-        ]).catch(async (err) => {
-            console.log('⚠️ No se detectó la interfaz esperada. URL actual:', page.url());
-            const html = await page.content();
-            console.log('📄 HTML snippet (primeros 500 chars):', html.substring(0, 500));
-            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_no_interface.png` });
-            throw new Error('Teams no cargó correctamente. Ver screenshot debug_no_interface.png');
-        });
-
-        console.log('✅ Interfaz cargada. Buscando chat por texto...');
-        
-        // Estrategia 1: Buscar por XPath usando texto exacto
-        let target = null;
-        try {
-            // Usar evaluate para buscar y hacer click directamente
-            const chatClicked = await page.evaluate((chatName) => {
-                // Buscar todos los elementos que contengan el texto
-                const allElements = Array.from(document.querySelectorAll('*'));
-                const chatElement = allElements.find(el => {
-                    const text = el.textContent?.trim();
-                    return text && text.includes(chatName);
-                });
+            for (let elem of allElements) {
+                const text = elem.textContent?.trim() || '';
                 
-                if (chatElement) {
-                    // Buscar el elemento clickeable más cercano (puede ser padre)
-                    let clickableElement = chatElement;
-                    while (clickableElement && !['A', 'BUTTON', 'DIV'].includes(clickableElement.tagName)) {
-                        clickableElement = clickableElement.parentElement;
-                    }
+                if (text === groupName) {
+                    let clickable = elem;
                     
-                    if (clickableElement) {
-                        clickableElement.click();
-                        return true;
+                    while (clickable && clickable !== document.body) {
+                        const tagName = clickable.tagName.toLowerCase();
+                        const role = clickable.getAttribute('role');
+                        
+                        if (tagName === 'button' || 
+                            tagName === 'a' || 
+                            role === 'button' ||
+                            clickable.onclick ||
+                            window.getComputedStyle(clickable).cursor === 'pointer') {
+                            
+                            clickable.click();
+                            return true;
+                        }
+                        
+                        clickable = clickable.parentElement;
                     }
                 }
-                return false;
-            }, GROUP_NAME);
-            
-            if (chatClicked) {
-                console.log('✅ Chat encontrado y clickeado con evaluate.');
-                await new Promise(r => setTimeout(r, 3000));
-            } else {
-                console.log('⚠️ No encontrado con evaluate, intentando XPath...');
             }
-        } catch (e) {
-            console.log('⚠️ Error con evaluate:', e.message);
-        }
-
-        // Estrategia 2: Si falla, buscar en todos los elementos visibles
-        if (!target) {
-            const allText = await page.evaluate(() => {
-                return Array.from(document.querySelectorAll('*')).map(el => el.textContent?.trim()).filter(Boolean);
-            });
-            console.log('📋 Textos encontrados en página (primeros 20):', allText.slice(0, 20));
+            
+            return false;
+        }, GROUP_NAME);
+        
+        if (!chatClicked) {
+            throw new Error(`❌ No se encontró el chat/grupo: "${GROUP_NAME}"`);
         }
         
-        // Verificar si el chat se abrió esperando un poco
-        await new Promise(r => setTimeout(r, 2000));
-        console.log('📍 URL actual después del click:', page.url());
-
-        // -----------------------------------------------------
-        // 📝 ENVIAR MENSAJE
-        // -----------------------------------------------------
-        console.log('⏳ Esperando input de chat...');
-        // Selector para Teams Personal (puede variar, buscamos el editor)
-        const selectorInput = '[contenteditable="true"], [data-tid="ckeditor-editor"]'; 
+        console.log('✅ Chat encontrado y clickeado');
+        await page.waitForTimeout(3000);
         
-        await page.waitForSelector(selectorInput, { timeout: 20000 });
-        await page.click(selectorInput);
+        // 5. Buscar input de mensaje
+        console.log('📝 Buscando campo de texto...');
+        await page.waitForSelector('div[contenteditable="true"]', { timeout: 10000 });
         
-        console.log('✍️ Escribiendo...');
-        await page.type(selectorInput, mensaje, { delay: 10 });
-        await page.keyboard.press('Enter');
+        // 6. Escribir mensaje
+        console.log('✍️ Escribiendo mensaje...');
+        await page.type('div[contenteditable="true"]', mensaje, { delay: 20 });
+        await page.waitForTimeout(1000);
         
-        await new Promise(r => setTimeout(r, 3000)); // Esperar envío
-        console.log('🚀 MENSAJE ENVIADO.');
-
+        // 7. Enviar
+        console.log('🚀 Enviando mensaje...');
+        const sendButtonSelector = 'button[aria-label*="Send"], button[title*="Send"], button[data-tid="newMessageCommands-send"]';
+        await page.waitForSelector(sendButtonSelector, { timeout: 10000 });
+        await page.click(sendButtonSelector);
+        
+        await page.waitForTimeout(2000);
+        console.log('✅ ¡Mensaje enviado exitosamente!');
+        
+        return { success: true, message: 'Mensaje enviado correctamente' };
+        
     } catch (error) {
         console.error('❌ ERROR:', error.message);
-        await page.screenshot({ path: `${SCREENSHOT_PATH}/error_debug_teams.png` });
+        
+        try {
+            const timestamp = Date.now();
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/error_${timestamp}.png`, fullPage: true });
+            console.log(`📸 Screenshot guardado: error_${timestamp}.png`);
+        } catch (screenshotError) {
+            console.error('No se pudo guardar screenshot:', screenshotError.message);
+        }
+        
+        throw error;
+        
     } finally {
         await browser.close();
     }
-})();
+}
+
+// ==========================================
+// 🌐 ENDPOINT PARA N8N
+// ==========================================
+app.post('/send', async (req, res) => {
+    try {
+        const { anydeskID, pcName } = req.body;
+        
+        if (!anydeskID || !pcName) {
+            return res.status(400).json({ 
+                error: 'Faltan parámetros: anydeskID y pcName son requeridos' 
+            });
+        }
+        
+        console.log(`📥 Solicitud recibida - ID: ${anydeskID}, PC: ${pcName}`);
+        
+        const result = await enviarMensajeTeams(anydeskID, pcName);
+        
+        res.json({ 
+            success: true, 
+            message: 'Mensaje enviado correctamente',
+            data: { anydeskID, pcName }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error procesando solicitud:', error);
+        res.status(500).json({ 
+            error: 'Error al enviar mensaje', 
+            details: error.message 
+        });
+    }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ==========================================
+// 🚀 INICIAR SERVIDOR
+// ==========================================
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Servidor escuchando en http://0.0.0.0:${PORT}`);
+    console.log(`📨 Endpoint: POST http://0.0.0.0:${PORT}/send`);
+    console.log(`💚 Health Check: GET http://0.0.0.0:${PORT}/health`);
+});
