@@ -4,14 +4,13 @@ const puppeteer = require('puppeteer');
 const messageToSend = process.argv[2]; 
 const chatName = "Ezequiel Mazzarello"; // Tu usuario
 const SESSION_DIR = '/home/pptruser/teams_session'; 
-const finalMessage = messageToSend || "🤖 SmartBot: Prueba de conexión.";
+const finalMessage = messageToSend || "🤖 SmartBot v4.1: Prueba de conexión.";
 
-// Función de espera (Sleep)
 const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
 
 (async () => {
     console.log("========================================");
-    console.log("🤖 INICIANDO SMART-BOT TEAMS v4.0");
+    console.log("🤖 INICIANDO SMART-BOT TEAMS v4.1 (Fix Puppeteer)");
     console.log("========================================");
 
     const browser = await puppeteer.launch({
@@ -21,155 +20,135 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--window-size=1920,1080',
-            '--disable-blink-features=AutomationControlled', // Oculta que es robot
+            '--disable-blink-features=AutomationControlled',
             '--disable-features=site-per-process'
         ]
     });
 
     const page = await browser.newPage();
-    
-    // User-Agent de Windows 10 Real (Importante para que no te tiren captcha)
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // --- ZONA DE COOKIES (Opcional si ya tenés persistencia, pero dejalo por seguridad) ---
-    // PEGÁ ACÁ TU ARRAY DE COOKIES ACTUALIZADO SI TENÉS UNO NUEVO
+    // --- ZONA DE COOKIES ---
     const sessionCookies = [
-        // ... (Tus cookies van acá) ...
-        // Asegurate de que el JSON esté bien formado
+        // ... PEGÁ ACÁ TU ARRAY DE COOKIES SI QUERÉS REFORZAR ...
     ];
 
     if (sessionCookies.length > 0) {
         try {
-            // Checkeo rápido para no romper si el JSON está vacío
             if (sessionCookies[0].name) {
-                console.log("🍪 Inyectando cookies de respaldo...");
+                console.log("🍪 Inyectando cookies...");
                 await page.setCookie(...sessionCookies);
             }
-        } catch (e) {
-            console.error("⚠️ Error inyectando cookies (formato incorrecto?):", e.message);
-        }
+        } catch (e) { console.error("⚠️ Error cookies:", e.message); }
     }
 
     try {
         console.log("🌐 Navegando a teams.live.com...");
         await page.goto('https://teams.live.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // --- EL CEREBRO (Bucle de Análisis) ---
-        // Intentaremos entender dónde estamos durante 60 segundos
+        // --- CEREBRO (Loop de Análisis) ---
         let isLoggedIn = false;
         let attempts = 0;
-        const maxAttempts = 12; // 12 intentos de 5 segundos = 60 segs max
+        const maxAttempts = 15; // Damos más tiempo (75 segs) porque vimos que carga lento
 
         while (attempts < maxAttempts && !isLoggedIn) {
             attempts++;
             console.log(`🧠 Análisis de estado (Intento ${attempts}/${maxAttempts})...`);
             
-            // 1. ¿ESTAMOS ADENTRO? (Buscamos la lista de chats)
+            // 1. ¿ESTAMOS ADENTRO? (Lista de chats)
             const chatList = await page.$('[role="list"], .chat-list-item, [data-tid="chat-list-item"]');
             if (chatList) {
-                console.log("✅ ¡ESTAMOS ADENTRO! Interfaz de chat detectada.");
+                console.log("✅ ¡ESTAMOS ADENTRO!");
                 isLoggedIn = true;
                 break;
             }
 
-            // 2. ¿ESTAMOS EN LA PORTADA DE MARKETING? (Tu foto error_debug_v2.jpg)
-            // Buscamos botones de "Sign in"
-            const signInBtn = await page.$x("//a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sign in')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'iniciar')]");
+            // 2. ¿PORTADA DE MARKETING? (Usando sintaxis nueva xpath/)
+            // Buscamos botones que digan "Sign in" o "Iniciar"
+            const signInXpath = "xpath///a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sign in')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'iniciar')]";
+            const signInBtn = await page.$$(signInXpath);
             
             if (signInBtn.length > 0) {
-                console.log("⚠️ Detectada Portada de Marketing. Intentando clic en 'Sign in'...");
-                
-                // A veces hay varios, clickeamos el primero que sea visible
+                console.log("⚠️ Detectada Portada. Clickeando 'Sign in'...");
                 try {
                     await signInBtn[0].click();
-                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => console.log("Navegación lenta, esperando..."));
-                    continue; // Reiniciamos el loop para ver a dónde nos llevó
-                } catch (e) {
-                    console.log("Error al clickear Sign in, reintentando...");
-                }
+                    await delay(5000); // Esperar a que reaccione
+                    continue;
+                } catch (e) {}
             }
 
-            // 3. ¿NOS PIDEN PASSWORD? (Si llegamos acá, las cookies murieron)
+            // 3. ¿PASSWORD?
             const passwordInput = await page.$('input[name="passwd"], input[type="password"]');
             if (passwordInput) {
-                console.error("⛔ ALERTA: Microsoft pide contraseña. Las cookies expiraron o son inválidas para esta IP.");
-                throw new Error("LOGIN_REQUIRED: Se requiere contraseña manual.");
+                throw new Error("LOGIN_REQUIRED: Pide contraseña manual.");
             }
 
-            // 4. ¿NOS PIDEN ELEGIR CUENTA? (Pick an account)
+            // 4. ¿SELECTOR DE CUENTAS?
             const accountTile = await page.$('.table-row, [data-test-id="tile_container"]');
             if (accountTile) {
-                console.log("👀 Selector de cuentas detectado. Eligiendo la primera...");
+                console.log("👀 Eligiendo cuenta...");
                 await accountTile.click();
                 await delay(3000);
                 continue;
             }
 
-            // 5. ¿POPUP DE 'MANTENER SESIÓN'?
+            // 5. ¿POPUP MANTENER SESIÓN?
             const staySignedIn = await page.$('input[type="submit"][value="Sí"], input[type="submit"][value="Yes"], #idSIButton9');
             if (staySignedIn) {
-                console.log("👀 Popup 'Mantener sesión' detectado. Aceptando...");
+                console.log("👀 Aceptando 'Mantener sesión'...");
                 await staySignedIn.click();
                 await delay(3000);
                 continue;
             }
-
-            console.log("⏳ Esperando carga...");
+            
+            // Si llegamos acá y no pasó nada, es que está cargando (Spinner violeta)
+            console.log("⏳ Esperando carga (o spinner)...");
             await delay(5000);
         }
 
-        if (!isLoggedIn) {
-            throw new Error("No se pudo iniciar sesión después de varios intentos.");
-        }
+        if (!isLoggedIn) throw new Error("Timeout: No se pudo entrar al chat.");
 
-        // --- FASE DE ENVÍO ---
+        // --- ENVÍO DE MENSAJE ---
         console.log("🔎 Buscando contacto:", chatName);
-        
-        // Espera de seguridad para que renderice la lista
         await delay(3000); 
 
-        // XPath robusto para buscar texto en spans, divs o h3
-        const targetXpath = `//*[contains(text(), '${chatName}')]`;
+        // Usamos la sintaxis nueva para buscar el chat por texto
+        const targetSelector = `xpath///span[contains(text(), '${chatName}')]`;
+        
         try {
-            await page.waitForXPath(targetXpath, { timeout: 20000 });
-            const chatElements = await page.$x(targetXpath);
+            // Esperar a que aparezca
+            await page.waitForSelector(targetSelector, { timeout: 20000 });
+            const chatElements = await page.$$(targetSelector);
             
             if (chatElements.length > 0) {
-                console.log("🖱️ Contacto encontrado. Abriendo chat...");
+                console.log("🖱️ Abriendo chat...");
                 await chatElements[0].click();
                 
                 console.log("📝 Buscando caja de texto...");
-                // Selector más genérico para el editor
                 await page.waitForSelector('[contenteditable="true"], .ck-editor__editable', { timeout: 20000 });
                 
-                console.log("⌨️ Escribiendo mensaje...");
-                // Focus y Type
+                console.log("⌨️ Escribiendo...");
                 await page.click('[contenteditable="true"], .ck-editor__editable');
                 await page.keyboard.type(finalMessage);
                 await delay(500);
                 await page.keyboard.press('Enter');
                 
                 console.log("🚀 MENSAJE ENVIADO.");
-                await delay(3000); // Dar tiempo a que salga
+                await delay(5000);
             } else {
-                throw new Error(`Contacto '${chatName}' no visible en la lista.`);
+                throw new Error("Chat no encontrado en la lista visual.");
             }
         } catch (e) {
-            throw new Error(`Error en el flujo de chat: ${e.message}`);
+            throw new Error(`Error buscando chat: ${e.message}`);
         }
 
     } catch (error) {
         console.error("❌ ERROR FATAL:", error.message);
-        
-        // FOTO DE DIAGNÓSTICO
         try {
-            const shotPath = `${SESSION_DIR}/error_debug_final.png`;
-            await page.screenshot({ path: shotPath, fullPage: true });
-            console.log(`📸 Foto del error guardada en: ${shotPath} (Bajala con docker cp)`);
-        } catch (e) { console.error("No se pudo sacar foto."); }
-        
+            await page.screenshot({ path: `${SESSION_DIR}/error_debug_v4.png`, fullPage: true });
+            console.log("📸 Foto guardada: error_debug_v4.png");
+        } catch (e) {}
     } finally {
-        console.log("👋 Cerrando navegador.");
         await browser.close();
     }
 })();
