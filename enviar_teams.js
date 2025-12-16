@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const fs = require('fs').promises;
 puppeteer.use(StealthPlugin());
 
 // ==========================================
@@ -12,6 +13,15 @@ const GROUP_NAME = process.env.TEAMS_GROUP_NAME || "AnyDesk Management";
 
 // Ruta para screenshots (dentro del contenedor, mapeada a host via volumen)
 const SCREENSHOT_PATH = '/home/pptruser/screenshots';
+
+// Crear directorio de screenshots si no existe
+(async () => {
+    try {
+        await fs.mkdir(SCREENSHOT_PATH, { recursive: true });
+    } catch (e) {
+        // Ignorar si ya existe
+    }
+})();
 
 // Argumentos desde n8n/consola
 const args = process.argv.slice(2);
