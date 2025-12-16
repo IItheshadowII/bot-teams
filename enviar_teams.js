@@ -263,9 +263,10 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             });
             console.log('📋 Textos encontrados en página (primeros 20):', allText.slice(0, 20));
         }
-            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_chat_not_found.png` });
-            throw new Error(`No encontré el chat "${GROUP_NAME}" en la lista. Ver screenshot debug_chat_not_found.png`);
-        }
+        
+        // Verificar si el chat se abrió esperando un poco
+        await new Promise(r => setTimeout(r, 2000));
+        console.log('📍 URL actual después del click:', page.url());
 
         // -----------------------------------------------------
         // 📝 ENVIAR MENSAJE
