@@ -28,33 +28,12 @@ if (!anydeskID || anydeskID === "ID_DESCONOCIDO") {
         console.log(`   💻 Equipo: ${pcName}`);
         console.log(`   🆔 ID: ${anydeskID}`);
 
-        // Crear mensaje con formato Markdown
+        // 🔹 Mensaje de texto plano para Teams
         const mensaje = {
-            "@type": "MessageCard",
-            "@context": "https://schema.org/extensions",
-            "summary": "Nuevo AnyDesk Detectado",
-            "themeColor": "FF6B6B",
-            "title": "🚨 Nuevo AnyDesk Detectado",
-            "sections": [
-                {
-                    "activityTitle": "Detalles del equipo",
-                    "facts": [
-                        {
-                            "name": "💻 Equipo:",
-                            "value": pcName
-                        },
-                        {
-                            "name": "🆔 ID AnyDesk:",
-                            "value": anydeskID
-                        },
-                        {
-                            "name": "📅 Fecha:",
-                            "value": new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })
-                        }
-                    ],
-                    "text": "👉 Por favor agregar a la lista de equipos autorizados."
-                }
-            ]
+            text:
+                `Buenas tardes , por favor podrían agregar el siguiente cloud:\n\n` +
+                `AnyDesk ID: ${anydeskID} **${pcName}\n\n` +
+                `Muchas gracias!`
         };
 
         // Enviar POST al webhook

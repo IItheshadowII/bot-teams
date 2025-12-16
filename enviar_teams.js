@@ -143,15 +143,48 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         }
         
         console.log('✅ Chat encontrado y clickeado');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // 5. Buscar input de mensaje
+        // 5. Buscar input de mensaje (intentar múltiples selectores)
         console.log('📝 Buscando campo de texto...');
-        await page.waitForSelector('div[contenteditable="true"]', { timeout: 10000 });
+        
+        // Screenshot de debug
+        try {
+            const timestamp = Date.now();
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_before_input_${timestamp}.png`, fullPage: true });
+            console.log(`📸 Debug screenshot: debug_before_input_${timestamp}.png`);
+        } catch (e) {}
+        
+        let inputSelector = null;
+        const possibleSelectors = [
+            'div[contenteditable="true"][role="textbox"]',
+            'div[contenteditable="true"]',
+            '[data-tid="ckeditor-input"]',
+            '[role="textbox"][contenteditable="true"]',
+            'div.ck-editor__editable',
+            'div[data-track-module-name="messageInput"]'
+        ];
+        
+        for (const selector of possibleSelectors) {
+            try {
+                await page.waitForSelector(selector, { timeout: 3000 });
+                inputSelector = selector;
+                console.log(`✅ Input encontrado con selector: ${selector}`);
+                break;
+            } catch (e) {
+                console.log(`⚠️ Selector no encontrado: ${selector}`);
+            }
+        }
+        
+        if (!inputSelector) {
+            throw new Error('❌ No se encontró el campo de texto con ningún selector');
+        }
         
         // 6. Escribir mensaje
         console.log('✍️ Escribiendo mensaje...');
-        await page.type('div[contenteditable="true"]', mensaje, { delay: 20 });
+        await page.click(inputSelector);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await page.type(inputSelector, mensaje, { delay: 20 });
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 7. Enviar
