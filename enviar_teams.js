@@ -22,7 +22,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
     
     const browser = await puppeteer.launch({
         headless: "new",
-        userDataDir: './teams_data', // Persistencia activada
+        userDataDir: '/home/pptruser/teams_data', // Ruta absoluta para persistencia
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080']
     });
 
@@ -33,12 +33,15 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
         // 1. Ir a la home de Teams Personal
         console.log('🌐 Entrando a Teams (Live)...');
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
+        
+        // Esperar un poco para redirecciones
+        await new Promise(r => setTimeout(r, 3000));
 
         // -----------------------------------------------------
         // 🔐 LOGIN (Soporta Live.com y Microsoft)
         // -----------------------------------------------------
         // Detectar si redirige a /free/ (no autenticado) o a login
-        const currentUrl = page.url();
+        let currentUrl = page.url();
         console.log('📍 URL después de navegar:', currentUrl);
         
         if (currentUrl.includes('/free/') || currentUrl.includes('login.') || currentUrl.includes('signin')) {
@@ -83,6 +86,13 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             console.log('✅ Login completado. URL actual:', page.url());
         } else {
             console.log('✅ Ya estaba autenticado.');
+        }
+        
+        // Verificación final: Si aún está en /free/, algo falló
+        currentUrl = page.url();
+        if (currentUrl.includes('/free/')) {
+            await page.screenshot({ path: '/app/stuck_in_free.png' });
+            throw new Error('Teams sigue redirigiendo a /free/ después del login. La sesión no persiste o las credenciales son incorrectas. Ver screenshot stuck_in_free.png');
         }
 
         // -----------------------------------------------------
