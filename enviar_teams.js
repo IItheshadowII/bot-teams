@@ -104,11 +104,49 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // 4. Buscar y abrir el chat de forma más agresiva
-        console.log(`🔍 Buscando chat: "${GROUP_NAME}"...`);
+        // 4. ESTRATEGIA ALTERNATIVA: Usar el buscador de Teams
+        console.log(`🔍 Usando buscador para encontrar chat: "${GROUP_NAME}"...`);
         
-        // Primero intentar buscar en elementos de lista de chats (li, listitem, etc.)
-        const chatClicked = await page.evaluate((groupName) => {
+        // Hacer clic en el buscador
+        const searchClicked = await page.evaluate(() => {
+            const searchInput = document.querySelector('input[type="search"], input[placeholder*="Search"], input[aria-label*="Search"]');
+            if (searchInput) {
+                searchInput.click();
+                searchInput.focus();
+                return true;
+            }
+            return false;
+        });
+        
+        if (searchClicked) {
+            console.log('✅ Buscador encontrado, escribiendo nombre...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await page.keyboard.type(GROUP_NAME, { delay: 100 });
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Screenshot de resultados de búsqueda
+            try {
+                const timestamp = Date.now();
+                await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_search_results_${timestamp}.png`, fullPage: true });
+                console.log(`📸 Debug screenshot: debug_search_results_${timestamp}.png`);
+            } catch (e) {}
+            
+            // Presionar Enter o hacer clic en el primer resultado
+            console.log('⬇️ Seleccionando primer resultado...');
+            await page.keyboard.press('ArrowDown');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await page.keyboard.press('Enter');
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            console.log('✅ Chat abierto desde búsqueda');
+        } else {
+            console.log('⚠️ No se encontró el buscador, usando método de clic directo...');
+            
+            // 4b. Buscar y abrir el chat haciendo clic directo (método original como fallback)
+            console.log(`🔍 Buscando chat en lista: "${GROUP_NAME}"...`);
+            
+            // Primero intentar buscar en elementos de lista de chats (li, listitem, etc.)
+            const chatClicked = await page.evaluate((groupName) => {
             // Estrategia 1: Buscar en elementos de lista (más confiable para chats)
             const listItems = document.querySelectorAll('li, [role="listitem"], [role="option"], [data-tid*="chat"], [data-tid*="conversation"]');
             
@@ -168,11 +206,12 @@ async function enviarMensajeTeams(anydeskID, pcName) {
             return false;
         }, GROUP_NAME);
         
-        if (!chatClicked) {
-            throw new Error(`❌ No se encontró el chat/grupo: "${GROUP_NAME}"`);
+            if (!chatClicked) {
+                throw new Error(`❌ No se encontró el chat/grupo: "${GROUP_NAME}"`);
+            }
+            
+            console.log('✅ Chat encontrado y clickeado (método clic directo)');
         }
-        
-        console.log('✅ Chat encontrado y clickeado');
         await new Promise(resolve => setTimeout(resolve, 5000));
         
         // Screenshot después del clic
