@@ -51,20 +51,48 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             if (currentUrl.includes('/free/')) {
                 console.log('↪️ Redirigiendo a login...');
                 await page.goto('https://login.live.com/login.srf?wa=wsignin1.0&rpsnv=150&ct=1702684800&rver=7.0.6738.0&wp=MBI_SSL&wreply=https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
+                await new Promise(r => setTimeout(r, 2000));
+                console.log('📍 URL después de ir a login:', page.url());
             }
             
             // Email
             console.log('📧 Ingresando email...');
             await page.waitForSelector('input[type="email"]', { timeout: 30000 });
             await page.type('input[type="email"]', USER_EMAIL, { delay: 50 });
+            await page.screenshot({ path: '/app/debug_01_email_entered.png' });
+            console.log('✅ Email ingresado, presionando Enter...');
             await page.keyboard.press('Enter');
             await new Promise(r => setTimeout(r, 3000));
+            console.log('📍 URL después de email:', page.url());
 
             // Password
-            console.log('🔑 Ingresando contraseña...');
-            await page.waitForSelector('input[type="password"]', { timeout: 30000 });
-            await page.type('input[type="password"]', USER_PASS, { delay: 50 });
-            await page.keyboard.press('Enter');
+            console.log('🔑 Esperando campo de contraseña...');
+            try {
+                await page.waitForSelector('input[type="password"]', { timeout: 30000 });
+                console.log('✅ Campo de contraseña encontrado');
+                await page.type('input[type="password"]', USER_PASS, { delay: 50 });
+                await page.screenshot({ path: '/app/debug_02_password_entered.png' });
+                console.log('✅ Contraseña ingresada, presionando Enter...');
+                await page.keyboard.press('Enter');
+            } catch (e) {
+                console.error('❌ No se encontró el campo de contraseña');
+                console.log('📍 URL actual:', page.url());
+                const html = await page.content();
+                console.log('📄 HTML (primeros 1000 chars):', html.substring(0, 1000));
+                await page.screenshot({ path: '/app/debug_password_not_found.png' });
+                
+                // Buscar todos los inputs en la página
+                const inputs = await page.evaluate(() => {
+                    return Array.from(document.querySelectorAll('input')).map(input => ({
+                        type: input.type,
+                        name: input.name,
+                        id: input.id,
+                        placeholder: input.placeholder
+                    }));
+                });
+                console.log('🔍 Inputs encontrados en la página:', JSON.stringify(inputs, null, 2));
+                throw e;
+            }
             
             // "Mantener sesión"
             console.log('💾 Guardando sesión...');
