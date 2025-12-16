@@ -222,9 +222,38 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
         // Estrategia 1: Buscar por XPath usando texto exacto
         let target = null;
         try {
-            target = await page.waitForSelector(`::-p-xpath(//*[contains(text(), "${GROUP_NAME}")])`, { timeout: 10000 });
+            // Usar evaluate para buscar y hacer click directamente
+            const chatClicked = await page.evaluate((chatName) => {
+                // Buscar todos los elementos que contengan el texto
+                const allElements = Array.from(document.querySelectorAll('*'));
+                const chatElement = allElements.find(el => {
+                    const text = el.textContent?.trim();
+                    return text && text.includes(chatName);
+                });
+                
+                if (chatElement) {
+                    // Buscar el elemento clickeable más cercano (puede ser padre)
+                    let clickableElement = chatElement;
+                    while (clickableElement && !['A', 'BUTTON', 'DIV'].includes(clickableElement.tagName)) {
+                        clickableElement = clickableElement.parentElement;
+                    }
+                    
+                    if (clickableElement) {
+                        clickableElement.click();
+                        return true;
+                    }
+                }
+                return false;
+            }, GROUP_NAME);
+            
+            if (chatClicked) {
+                console.log('✅ Chat encontrado y clickeado con evaluate.');
+                await new Promise(r => setTimeout(r, 3000));
+            } else {
+                console.log('⚠️ No encontrado con evaluate, intentando XPath...');
+            }
         } catch (e) {
-            console.log('⚠️ No encontrado con XPath exacto, intentando búsqueda parcial...');
+            console.log('⚠️ Error con evaluate:', e.message);
         }
 
         // Estrategia 2: Si falla, buscar en todos los elementos visibles
@@ -233,20 +262,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
                 return Array.from(document.querySelectorAll('*')).map(el => el.textContent?.trim()).filter(Boolean);
             });
             console.log('📋 Textos encontrados en página (primeros 20):', allText.slice(0, 20));
-            
-            // Intenta con click por coordenadas si encuentras el texto
-            const elements = await page.$x(`//*[contains(text(), "${GROUP_NAME}")]`);
-            if (elements.length > 0) {
-                target = elements[0];
-                console.log('✅ Chat encontrado con búsqueda alternativa.');
-            }
         }
-
-        if (target) {
-            console.log('✅ Chat encontrado. Haciendo click...');
-            await target.click();
-            await new Promise(r => setTimeout(r, 2000)); // Esperar que abra
-        } else {
             await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_chat_not_found.png` });
             throw new Error(`No encontré el chat "${GROUP_NAME}" en la lista. Ver screenshot debug_chat_not_found.png`);
         }
