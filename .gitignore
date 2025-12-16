@@ -6,3 +6,5 @@ build/
 npm-debug.log*
 .vscode/
 /.idea/
+teams_session.zip
+teams_session_local/
