@@ -143,9 +143,68 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         }
         
         console.log('✅ Chat encontrado y clickeado');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Screenshot después del primer clic
+        try {
+            const timestamp = Date.now();
+            await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_after_click_${timestamp}.png`, fullPage: true });
+            console.log(`📸 Debug screenshot: debug_after_click_${timestamp}.png`);
+        } catch (e) {}
+        
+        // Intentar doble clic para asegurar que se abre la conversación
+        console.log('🔄 Haciendo doble clic en el chat para asegurar que se abre...');
+        await page.evaluate((groupName) => {
+            const allElements = document.querySelectorAll('*');
+            
+            for (let elem of allElements) {
+                const text = elem.textContent?.trim() || '';
+                
+                if (text === groupName) {
+                    let clickable = elem;
+                    
+                    while (clickable && clickable !== document.body) {
+                        const tagName = clickable.tagName.toLowerCase();
+                        const role = clickable.getAttribute('role');
+                        
+                        if (tagName === 'button' || 
+                            tagName === 'a' || 
+                            role === 'button' ||
+                            clickable.onclick ||
+                            window.getComputedStyle(clickable).cursor === 'pointer') {
+                            
+                            clickable.click();
+                            return true;
+                        }
+                        
+                        clickable = clickable.parentElement;
+                    }
+                }
+            }
+            
+            return false;
+        }, GROUP_NAME);
+        
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // 5. Buscar input de mensaje usando evaluación del DOM
+        // 5. Hacer clic en el área de mensajes para activar el campo de texto
+        console.log('🖱️ Haciendo clic en el área de mensajes...');
+        await page.evaluate(() => {
+            // Buscar el área principal de chat
+            const mainAreas = document.querySelectorAll('[role="main"], [role="region"], main, .main-content');
+            
+            for (let area of mainAreas) {
+                const rect = area.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    area.click();
+                    break;
+                }
+            }
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // 6. Buscar input de mensaje usando evaluación del DOM
         console.log('📝 Buscando campo de texto...');
         
         // Screenshot de debug
@@ -155,17 +214,51 @@ async function enviarMensajeTeams(anydeskID, pcName) {
             console.log(`📸 Debug screenshot: debug_before_input_${timestamp}.png`);
         } catch (e) {}
         
-        // Intentar encontrar y hacer clic en el input usando page.evaluate
+        // Intentar encontrar y hacer clic en el input usando page.evaluate (buscar más agresivamente)
         const inputFound = await page.evaluate(() => {
-            // Buscar todos los elementos contenteditable
-            const editables = document.querySelectorAll('[contenteditable="true"]');
+            // 1. Buscar contenteditable
+            let editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+            console.log('Contenteditable encontrados:', editables.length);
             
             for (let elem of editables) {
                 const rect = elem.getBoundingClientRect();
                 
                 // Verificar que sea visible y tenga tamaño
                 if (rect.width > 0 && rect.height > 0) {
-                    // Hacer clic para enfocar
+                    elem.click();
+                    elem.focus();
+                    return true;
+                }
+            }
+            
+            // 2. Buscar textbox por role
+            let textboxes = Array.from(document.querySelectorAll('[role="textbox"]'));
+            console.log('Textboxes encontrados:', textboxes.length);
+            
+            for (let elem of textboxes) {
+                const rect = elem.getBoundingClientRect();
+                
+                if (rect.width > 0 && rect.height > 0) {
+                    elem.click();
+                    elem.focus();
+                    
+                    // Si no es contenteditable, hacerlo editable
+                    if (!elem.hasAttribute('contenteditable')) {
+                        elem.setAttribute('contenteditable', 'true');
+                    }
+                    
+                    return true;
+                }
+            }
+            
+            // 3. Buscar por placeholder
+            let placeholders = Array.from(document.querySelectorAll('[placeholder*="Type"], [placeholder*="Message"], [placeholder*="Escribe"], [placeholder*="Mensaje"]'));
+            console.log('Placeholders encontrados:', placeholders.length);
+            
+            for (let elem of placeholders) {
+                const rect = elem.getBoundingClientRect();
+                
+                if (rect.width > 0 && rect.height > 0) {
                     elem.click();
                     elem.focus();
                     return true;
@@ -193,12 +286,12 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         console.log('✅ Input encontrado y enfocado');
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 6. Escribir mensaje usando keyboard
+        // 7. Escribir mensaje usando keyboard
         console.log('✍️ Escribiendo mensaje...');
         await page.keyboard.type(mensaje, { delay: 20 });
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 7. Enviar usando Enter o buscando el botón
+        // 8. Enviar usando Enter o buscando el botón
         console.log('🚀 Enviando mensaje...');
         
         // Intentar con Enter primero
