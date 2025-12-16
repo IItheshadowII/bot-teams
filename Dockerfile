@@ -18,4 +18,5 @@ RUN npm install
 COPY enviar_teams.js .
 
 # Comando que se ejecuta al iniciar el contenedor
-CMD ["npm", "start"]
+# TEMPORAL: mantener el contenedor vivo para permitir `docker exec` durante el login
+CMD ["sleep", "infinity"]
