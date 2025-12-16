@@ -1,40 +1,32 @@
 const puppeteer = require('puppeteer');
-const fs = require('fs'); // Necesario para borrar el candado
+const fs = require('fs');
 const path = require('path');
 
 // --- CONFIGURACIÓN ---
 const messageToSend = process.argv[2]; 
 const chatName = "Ezequiel Mazzarello"; 
 const SESSION_DIR = '/home/pptruser/teams_session'; 
-const finalMessage = messageToSend || "🤖 SmartBot v4.3: Prueba con Auto-Unlock.";
+const finalMessage = messageToSend || "🤖 SmartBot v5.0: Prueba de acceso directo.";
 
 const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
 
 (async () => {
     console.log("========================================");
-    console.log("🤖 INICIANDO SMART-BOT TEAMS v4.3 (Cerrajero)");
+    console.log("🤖 INICIANDO SMART-BOT TEAMS v5.0 (Francotirador)");
     console.log("========================================");
 
-    // 🧹 LIMPIEZA DE CANDADOS VIEJOS (El Fix del Error Actual)
+    // 1. AUTO-UNLOCK (Limpieza de candados)
     try {
         const lockFile = path.join(SESSION_DIR, 'SingletonLock');
-        if (fs.existsSync(lockFile)) {
-            console.log("🔐 Detectado archivo de bloqueo (SingletonLock). Eliminando para liberar sesión...");
-            fs.unlinkSync(lockFile);
-            console.log("🔓 Sesión liberada con éxito.");
-        }
-    } catch (e) {
-        console.error("⚠️ No se pudo limpiar el lockfile (quizás no existía o falta permiso):", e.message);
-    }
+        try { fs.unlinkSync(lockFile); console.log("🔓 Lock eliminado."); } catch (e) {}
+    } catch (e) {}
 
     const browser = await puppeteer.launch({
         headless: "new",
         userDataDir: SESSION_DIR,
         args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', // Mantiene la memoria estable
-            '--disable-gpu',
+            '--no-sandbox', '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage', '--disable-gpu',
             '--disable-accelerated-2d-canvas',
             '--window-size=1920,1080',
             '--disable-blink-features=AutomationControlled'
@@ -44,11 +36,10 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-    // --- ZONA DE COOKIES ---
-    // Si ya lograste loguearte antes, esto puede estar vacío.
-    // Si borraste todo, ponelas de nuevo.
+    // 2. INYECCIÓN DE COOKIES
+    // --- ¡PEGÁ TUS COOKIES ACÁ O NO VA A FUNCIONAR! ---
     const sessionCookies = [
-        // ... TUS COOKIES ...
+       // ... TUS COOKIES ...
     ];
 
     if (sessionCookies.length > 0 && sessionCookies[0].name) {
@@ -59,27 +50,20 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
     }
 
     try {
-        console.log("🌐 Navegando a teams.live.com...");
-        await page.goto('https://teams.live.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // 3. ESTRATEGIA DE ACCESO DIRECTO
+        // Intentamos ir a la versión V2 (WebApp) directo para saltar la portada
+        console.log("🌐 Navegando directo a la WebApp (/v2/)...");
+        await page.goto('https://teams.live.com/v2/', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // --- CEREBRO ---
         let isLoggedIn = false;
         let attempts = 0;
         const maxAttempts = 20; 
 
         while (attempts < maxAttempts && !isLoggedIn) {
             attempts++;
-            console.log(`🧠 Estado (Intento ${attempts}/${maxAttempts})...`);
+            console.log(`🧠 Análisis (Intento ${attempts}/${maxAttempts})...`);
             
-            // 0. AVISO DE DESCARGA
-            const useWebXpath = "xpath///a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'web')]";
-            const useWebBtn = await page.$$(useWebXpath);
-            if (useWebBtn.length > 0) {
-                console.log("⚠️ Detectado aviso de descarga. Clickeando 'Usar Web App'...");
-                try { await useWebBtn[0].click(); await delay(5000); } catch(e){}
-            }
-
-            // 1. ESTAMOS ADENTRO
+            // A. ¿YA ESTAMOS ADENTRO?
             const chatList = await page.$('[role="list"], .chat-list-item, [data-tid="chat-list-item"]');
             if (chatList) {
                 console.log("✅ ¡ESTAMOS ADENTRO!");
@@ -87,27 +71,50 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 break;
             }
 
-            // 2. PORTADA
-            const signInXpath = "xpath///a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sign in')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'iniciar')]";
-            const signInBtn = await page.$$(signInXpath);
-            if (signInBtn.length > 0) {
-                console.log("⚠️ Portada detectada. Clickeando 'Sign in'...");
-                try { await signInBtn[0].click(); await delay(5000); continue; } catch (e) {}
+            // B. ¿ESTAMOS EN LA PORTADA? (NUEVO SELECTOR BASADO EN TU FOTO)
+            // Buscamos botones específicos por atributo data-onclick o texto
+            const signInSelectors = [
+                '[data-onclick="SignIn"]', // El que sale en tu inspector
+                'button[data-bi-id="header-sign-in-button"]',
+                'xpath///button[contains(., "Iniciar sesión")]',
+                'xpath///button[contains(., "Sign in")]'
+            ];
+
+            for (const selector of signInSelectors) {
+                let btn;
+                if (selector.startsWith('xpath')) {
+                    const els = await page.$$(selector);
+                    if (els.length > 0) btn = els[0];
+                } else {
+                    btn = await page.$(selector);
+                }
+
+                if (btn) {
+                    console.log(`⚠️ Botón de Login detectado (${selector}). Clickeando...`);
+                    try { 
+                        await btn.click(); 
+                        await delay(5000); 
+                        // Rompemos el loop interno para volver a analizar la pantalla
+                        break; 
+                    } catch (e) { console.log("Click falló, probando siguiente..."); }
+                }
             }
 
-            // 3. PASSWORD (ERROR)
+            // C. ¿PASSWORD? (Si aparece esto, LAS COOKIES MURIERON)
             const passwordInput = await page.$('input[name="passwd"], input[type="password"]');
-            if (passwordInput) throw new Error("LOGIN_REQUIRED: Pide contraseña.");
+            if (passwordInput) {
+                throw new Error("LOGIN_REQUIRED: Las cookies fueron rechazadas. Se requiere contraseña.");
+            }
 
-            // 4. SELECTOR CUENTA
+            // D. ¿SELECTOR DE CUENTA?
             const accountTile = await page.$('.table-row, [data-test-id="tile_container"]');
             if (accountTile) {
                 console.log("👀 Eligiendo cuenta...");
                 await accountTile.click();
                 await delay(3000); continue;
             }
-
-            // 5. MANTENER SESIÓN
+            
+            // E. ¿POPUP MANTENER SESIÓN?
             const staySignedIn = await page.$('input[type="submit"][value="Sí"], input[type="submit"][value="Yes"], #idSIButton9');
             if (staySignedIn) {
                 console.log("👀 Aceptando 'Mantener sesión'...");
@@ -115,20 +122,20 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 await delay(3000); continue;
             }
 
-            // ANTI-SPINNER
+            // ANTI-SPINNER (Recarga si se traba)
             if (attempts === 8) {
-                console.log("🔄 REFRESH FORZADO (F5)...");
+                console.log("🔄 REFRESH FORZADO...");
                 await page.reload({ waitUntil: "domcontentloaded" });
                 await delay(5000);
             }
             
-            console.log("⏳ Esperando carga...");
-            await delay(5000);
+            console.log("⏳ Esperando...");
+            await delay(4000);
         }
 
-        if (!isLoggedIn) throw new Error("Timeout Login.");
+        if (!isLoggedIn) throw new Error("Timeout: No se pudo entrar al chat.");
 
-        // --- ENVÍO ---
+        // --- ENVÍO DE MENSAJE ---
         console.log("🔎 Buscando contacto:", chatName);
         await delay(3000); 
 
@@ -161,10 +168,10 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
         }
 
     } catch (error) {
-        console.error("❌ ERROR FATAL:", error.message);
+        console.error("❌ ERROR:", error.message);
         try {
-            await page.screenshot({ path: `${SESSION_DIR}/error_debug_v4_3.png`, fullPage: true });
-            console.log("📸 Foto error guardada: error_debug_v4_3.png");
+            await page.screenshot({ path: `${SESSION_DIR}/error_debug_v5.png`, fullPage: true });
+            console.log("📸 Foto error: error_debug_v5.png");
         } catch (e) {}
     } finally {
         await browser.close();
