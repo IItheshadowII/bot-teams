@@ -104,10 +104,28 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // 4. Buscar el chat usando page.evaluate()
+        // 4. Buscar y abrir el chat de forma más agresiva
         console.log(`🔍 Buscando chat: "${GROUP_NAME}"...`);
         
+        // Primero intentar buscar en elementos de lista de chats (li, listitem, etc.)
         const chatClicked = await page.evaluate((groupName) => {
+            // Estrategia 1: Buscar en elementos de lista (más confiable para chats)
+            const listItems = document.querySelectorAll('li, [role="listitem"], [role="option"], [data-tid*="chat"], [data-tid*="conversation"]');
+            
+            for (let item of listItems) {
+                const text = item.textContent?.trim() || '';
+                
+                if (text.includes(groupName)) {
+                    const rect = item.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        item.click();
+                        console.log('Clic en listitem que contiene:', groupName);
+                        return true;
+                    }
+                }
+            }
+            
+            // Estrategia 2: Buscar texto exacto y hacer clic en el contenedor clickable más cercano
             const allElements = document.querySelectorAll('*');
             
             for (let elem of allElements) {
@@ -116,21 +134,33 @@ async function enviarMensajeTeams(anydeskID, pcName) {
                 if (text === groupName) {
                     let clickable = elem;
                     
-                    while (clickable && clickable !== document.body) {
+                    // Subir hasta encontrar un elemento clickable (máx 10 niveles)
+                    let levels = 0;
+                    while (clickable && clickable !== document.body && levels < 10) {
                         const tagName = clickable.tagName.toLowerCase();
                         const role = clickable.getAttribute('role');
+                        const tabindex = clickable.getAttribute('tabindex');
                         
                         if (tagName === 'button' || 
-                            tagName === 'a' || 
+                            tagName === 'a' ||
+                            tagName === 'li' ||
                             role === 'button' ||
+                            role === 'listitem' ||
+                            role === 'option' ||
+                            tabindex === '0' ||
                             clickable.onclick ||
                             window.getComputedStyle(clickable).cursor === 'pointer') {
                             
-                            clickable.click();
-                            return true;
+                            const rect = clickable.getBoundingClientRect();
+                            if (rect.width > 0 && rect.height > 0) {
+                                clickable.click();
+                                console.log('Clic en elemento:', tagName, role);
+                                return true;
+                            }
                         }
                         
                         clickable = clickable.parentElement;
+                        levels++;
                     }
                 }
             }
@@ -143,49 +173,36 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         }
         
         console.log('✅ Chat encontrado y clickeado');
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // Screenshot después del primer clic
+        // Screenshot después del clic
         try {
             const timestamp = Date.now();
             await page.screenshot({ path: `${SCREENSHOT_PATH}/debug_after_click_${timestamp}.png`, fullPage: true });
             console.log(`📸 Debug screenshot: debug_after_click_${timestamp}.png`);
         } catch (e) {}
         
-        // Intentar doble clic para asegurar que se abre la conversación
-        console.log('🔄 Haciendo doble clic en el chat para asegurar que se abre...');
-        await page.evaluate((groupName) => {
-            const allElements = document.querySelectorAll('*');
-            
-            for (let elem of allElements) {
-                const text = elem.textContent?.trim() || '';
-                
-                if (text === groupName) {
-                    let clickable = elem;
-                    
-                    while (clickable && clickable !== document.body) {
-                        const tagName = clickable.tagName.toLowerCase();
-                        const role = clickable.getAttribute('role');
-                        
-                        if (tagName === 'button' || 
-                            tagName === 'a' || 
-                            role === 'button' ||
-                            clickable.onclick ||
-                            window.getComputedStyle(clickable).cursor === 'pointer') {
-                            
-                            clickable.click();
-                            return true;
-                        }
-                        
-                        clickable = clickable.parentElement;
-                    }
-                }
-            }
-            
-            return false;
-        }, GROUP_NAME);
+        // Verificar si la conversación se abrió (buscar indicadores)
+        const conversationOpen = await page.evaluate(() => {
+            // Buscar si hay elementos que indican que la conversación está abierta
+            const hasConversation = document.querySelector('[role="main"]') || 
+                                   document.querySelector('[data-tid="messaging-canvas"]') ||
+                                   document.querySelectorAll('[contenteditable="true"]').length > 0;
+            return !!hasConversation;
+        });
         
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (!conversationOpen) {
+            console.log('⚠️ La conversación no parece haberse abierto, intentando clic adicional...');
+            
+            // Intentar clic en la misma posición del screenshot (centro de pantalla)
+            const dimensions = await page.evaluate(() => ({
+                width: window.innerWidth,
+                height: window.innerHeight
+            }));
+            
+            await page.mouse.click(dimensions.width / 2, dimensions.height / 3);
+            await new Promise(resolve => setTimeout(resolve, 3000));
+        }
         
         // 5. Hacer clic en el área de mensajes para activar el campo de texto
         console.log('🖱️ Haciendo clic en el área de mensajes...');
