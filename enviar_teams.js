@@ -91,15 +91,20 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
                 
                 // Hacer click en el botón "Back"
                 try {
-                    const backButton = await page.waitForSelector('input[value="Back"], button:has-text("Back"), #idBtn_Back', { timeout: 5000 });
+                    // Buscar el botón Back por múltiples selectores
+                    const backButton = await page.waitForSelector('#idBtn_Back', { timeout: 5000 }).catch(() => null);
+                    
                     if (backButton) {
                         console.log('✅ Botón Back encontrado, haciendo click...');
-                        await Promise.all([
-                            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }).catch(() => console.log('⚠️ No hubo navegación después del click')),
-                            backButton.click()
+                        await backButton.click();
+                        // Esperar navegación o cambio de página
+                        await Promise.race([
+                            page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 10000 }),
+                            new Promise(r => setTimeout(r, 4000))
                         ]);
-                        await new Promise(r => setTimeout(r, 3000));
                         console.log('📍 URL después de Back:', page.url());
+                    } else {
+                        console.log('⚠️ Botón Back no encontrado');
                     }
                 } catch (e) {
                     console.log('⚠️ Error con botón Back:', e.message);
@@ -108,13 +113,30 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
                 // Verificar si ahora hay opciones de login
                 currentUrlAfterEmail = page.url();
                 if (currentUrlAfterEmail.includes('fido/get')) {
-                    console.log('⚠️ Aún en página FIDO después de Back. Buscando opción de contraseña...');
-                    // Buscar "Sign-in options" o links de password
-                    const signInOptionsLink = await page.$x("//a[contains(., 'Sign-in options') or contains(., 'sign-in options') or contains(., 'Other ways to sign in')]");
-                    if (signInOptionsLink.length > 0) {
-                        console.log('✅ Encontrado link de opciones, haciendo click...');
-                        await signInOptionsLink[0].click();
+                    console.log('⚠️ Aún en página FIDO después de Back. Buscando opción de contraseña con evaluate...');
+                    
+                    // Buscar y hacer click en "Sign-in options" usando evaluate
+                    const clickedOption = await page.evaluate(() => {
+                        // Buscar todos los links y divs clickeables
+                        const allElements = Array.from(document.querySelectorAll('a, div[role="button"], button, span'));
+                        const signInOption = allElements.find(el => 
+                            el.textContent.toLowerCase().includes('sign-in options') ||
+                            el.textContent.toLowerCase().includes('other ways') ||
+                            el.textContent.toLowerCase().includes('use') && el.textContent.toLowerCase().includes('password')
+                        );
+                        
+                        if (signInOption) {
+                            signInOption.click();
+                            return true;
+                        }
+                        return false;
+                    });
+                    
+                    if (clickedOption) {
+                        console.log('✅ Encontrada y clickeada opción de Sign-in, esperando...');
                         await new Promise(r => setTimeout(r, 3000));
+                    } else {
+                        console.log('⚠️ No se encontró opción de Sign-in alternatives');
                     }
                 }
             }
