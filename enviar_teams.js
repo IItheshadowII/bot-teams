@@ -21,7 +21,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
     console.log(`🤖 INICIANDO BOT (Modo: Buscar "${GROUP_NAME}")...`);
     
     const browser = await puppeteer.launch({
-        headless: "new",
+        headless: false,
         userDataDir: './teams_data', // Persistencia activada
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080']
     });
