@@ -10,8 +10,8 @@ const USER_PASS = process.env.TEAMS_PASSWORD;
 // En tu caso, el nombre exacto que se ve en la barra lateral
 const GROUP_NAME = process.env.TEAMS_GROUP_NAME || "AnyDesk Management"; 
 
-// Ruta para screenshots (fuera del contenedor, en el host)
-const SCREENSHOT_PATH = '/home/ebanega';
+// Ruta para screenshots (dentro del contenedor, mapeada a host via volumen)
+const SCREENSHOT_PATH = '/home/pptruser/screenshots';
 
 // Argumentos desde n8n/consola
 const args = process.argv.slice(2);
