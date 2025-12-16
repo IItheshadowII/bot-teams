@@ -145,7 +145,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         console.log('✅ Chat encontrado y clickeado');
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // 5. Buscar input de mensaje (intentar múltiples selectores)
+        // 5. Buscar input de mensaje usando evaluación del DOM
         console.log('📝 Buscando campo de texto...');
         
         // Screenshot de debug
@@ -155,43 +155,85 @@ async function enviarMensajeTeams(anydeskID, pcName) {
             console.log(`📸 Debug screenshot: debug_before_input_${timestamp}.png`);
         } catch (e) {}
         
-        let inputSelector = null;
-        const possibleSelectors = [
-            'div[contenteditable="true"][role="textbox"]',
-            'div[contenteditable="true"]',
-            '[data-tid="ckeditor-input"]',
-            '[role="textbox"][contenteditable="true"]',
-            'div.ck-editor__editable',
-            'div[data-track-module-name="messageInput"]'
-        ];
-        
-        for (const selector of possibleSelectors) {
-            try {
-                await page.waitForSelector(selector, { timeout: 3000 });
-                inputSelector = selector;
-                console.log(`✅ Input encontrado con selector: ${selector}`);
-                break;
-            } catch (e) {
-                console.log(`⚠️ Selector no encontrado: ${selector}`);
+        // Intentar encontrar y hacer clic en el input usando page.evaluate
+        const inputFound = await page.evaluate(() => {
+            // Buscar todos los elementos contenteditable
+            const editables = document.querySelectorAll('[contenteditable="true"]');
+            
+            for (let elem of editables) {
+                const rect = elem.getBoundingClientRect();
+                
+                // Verificar que sea visible y tenga tamaño
+                if (rect.width > 0 && rect.height > 0) {
+                    // Hacer clic para enfocar
+                    elem.click();
+                    elem.focus();
+                    return true;
+                }
             }
-        }
+            
+            return false;
+        });
         
-        if (!inputSelector) {
+        if (!inputFound) {
+            // Listar todos los contenteditable para debug
+            const debugInfo = await page.evaluate(() => {
+                const editables = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+                return editables.map(el => ({
+                    tag: el.tagName,
+                    role: el.getAttribute('role'),
+                    class: el.className,
+                    visible: el.offsetWidth > 0 && el.offsetHeight > 0
+                }));
+            });
+            console.log('📋 Elementos contenteditable encontrados:', JSON.stringify(debugInfo, null, 2));
             throw new Error('❌ No se encontró el campo de texto con ningún selector');
         }
         
-        // 6. Escribir mensaje
-        console.log('✍️ Escribiendo mensaje...');
-        await page.click(inputSelector);
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await page.type(inputSelector, mensaje, { delay: 20 });
+        console.log('✅ Input encontrado y enfocado');
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 7. Enviar
+        // 6. Escribir mensaje usando keyboard
+        console.log('✍️ Escribiendo mensaje...');
+        await page.keyboard.type(mensaje, { delay: 20 });
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 7. Enviar usando Enter o buscando el botón
         console.log('🚀 Enviando mensaje...');
-        const sendButtonSelector = 'button[aria-label*="Send"], button[title*="Send"], button[data-tid="newMessageCommands-send"]';
-        await page.waitForSelector(sendButtonSelector, { timeout: 10000 });
-        await page.click(sendButtonSelector);
+        
+        // Intentar con Enter primero
+        try {
+            await page.keyboard.press('Enter');
+            console.log('✅ Mensaje enviado con Enter');
+        } catch (e) {
+            console.log('⚠️ Enter no funcionó, buscando botón de enviar...');
+            
+            // Buscar botón de enviar
+            const sendClicked = await page.evaluate(() => {
+                const buttons = document.querySelectorAll('button');
+                
+                for (let btn of buttons) {
+                    const text = btn.textContent?.toLowerCase() || '';
+                    const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
+                    const title = btn.getAttribute('title')?.toLowerCase() || '';
+                    
+                    if (text.includes('send') || text.includes('enviar') || 
+                        ariaLabel.includes('send') || ariaLabel.includes('enviar') ||
+                        title.includes('send') || title.includes('enviar')) {
+                        btn.click();
+                        return true;
+                    }
+                }
+                
+                return false;
+            });
+            
+            if (!sendClicked) {
+                throw new Error('❌ No se encontró el botón de enviar');
+            }
+            
+            console.log('✅ Mensaje enviado con botón');
+        }
         
         await new Promise(resolve => setTimeout(resolve, 2000));
         console.log('✅ ¡Mensaje enviado exitosamente!');
