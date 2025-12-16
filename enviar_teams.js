@@ -22,7 +22,7 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
     
     const browser = await puppeteer.launch({
         headless: "new",
-        userDataDir: '/home/pptruser/teams_data', // Ruta absoluta para persistencia
+        userDataDir: '/home/pptruser/teams_session', // Ruta del volumen montado en EasyPanel
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1920,1080']
     });
 
