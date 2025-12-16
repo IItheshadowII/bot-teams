@@ -49,7 +49,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         // 1. Ir a Teams Personal
         console.log('🌐 Entrando a Teams (Live)...');
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // 2. Verificar autenticación
         const currentUrl = page.url();
@@ -65,27 +65,27 @@ async function enviarMensajeTeams(anydeskID, pcName) {
                 console.log('⚠️ Página de FIDO detectada. Haciendo clic en "Volver"...');
                 await page.waitForSelector('#idBtn_Back', { timeout: 10000 });
                 await page.click('#idBtn_Back');
-                await page.waitForTimeout(2000);
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
             
             // Email
             await page.waitForSelector('input[type="email"]', { timeout: 10000 });
             await page.type('input[type="email"]', USER_EMAIL, { delay: 50 });
-            await page.waitForTimeout(500);
+            await new Promise(resolve => setTimeout(resolve, 500));
             await page.click('input[type="submit"]');
-            await page.waitForTimeout(3000);
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
             // Password
             try {
                 await page.waitForSelector('input[type="password"]', { timeout: 10000 });
                 await page.type('input[type="password"]', USER_PASS, { delay: 50 });
-                await page.waitForTimeout(500);
+                await new Promise(resolve => setTimeout(resolve, 500));
                 await page.click('input[type="submit"]');
             } catch (error) {
                 console.log('⚠️ No se encontró campo de password');
             }
             
-            await page.waitForTimeout(5000);
+            await new Promise(resolve => setTimeout(resolve, 5000));
             
             // "Mantener sesión"
             try {
@@ -102,7 +102,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         // 3. Navegar a interfaz de chats
         console.log('📍 Navegando a la interfaz de chats...');
         await page.goto('https://teams.live.com/v2/', { waitUntil: 'networkidle2', timeout: 90000 });
-        await page.waitForTimeout(5000);
+        await new Promise(resolve => setTimeout(resolve, 5000));
         
         // 4. Buscar el chat usando page.evaluate()
         console.log(`🔍 Buscando chat: "${GROUP_NAME}"...`);
@@ -143,7 +143,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         }
         
         console.log('✅ Chat encontrado y clickeado');
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
         // 5. Buscar input de mensaje
         console.log('📝 Buscando campo de texto...');
@@ -152,7 +152,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         // 6. Escribir mensaje
         console.log('✍️ Escribiendo mensaje...');
         await page.type('div[contenteditable="true"]', mensaje, { delay: 20 });
-        await page.waitForTimeout(1000);
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 7. Enviar
         console.log('🚀 Enviando mensaje...');
@@ -160,7 +160,7 @@ async function enviarMensajeTeams(anydeskID, pcName) {
         await page.waitForSelector(sendButtonSelector, { timeout: 10000 });
         await page.click(sendButtonSelector);
         
-        await page.waitForTimeout(2000);
+        await new Promise(resolve => setTimeout(resolve, 2000));
         console.log('✅ ¡Mensaje enviado exitosamente!');
         
         return { success: true, message: 'Mensaje enviado correctamente' };
