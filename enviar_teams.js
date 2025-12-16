@@ -78,8 +78,32 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
             await new Promise(r => setTimeout(r, 3000));
             console.log('📍 URL después de email:', page.url());
 
-            // Password
+            // Password - Microsoft puede mostrar página FIDO primero
             console.log('🔑 Esperando campo de contraseña...');
+            
+            // Verificar si estamos en página FIDO (sin contraseña)
+            const currentUrlAfterEmail = page.url();
+            if (currentUrlAfterEmail.includes('fido/get')) {
+                console.log('⚠️ Detectada página de autenticación FIDO (passkey). Volviendo a opciones tradicionales...');
+                // Hacer clic en "Atrás" o buscar opción de contraseña
+                try {
+                    const backButton = await page.waitForSelector('#idBtn_Back', { timeout: 5000 });
+                    if (backButton) {
+                        await backButton.click();
+                        console.log('✅ Click en botón Atrás');
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                } catch (e) {
+                    console.log('⚠️ No se encontró botón Atrás, buscando opción de contraseña...');
+                    // Buscar link de "Sign in with password" u opciones alternativas
+                    const passwordLink = await page.$x("//a[contains(text(), 'password') or contains(text(), 'Password')]");
+                    if (passwordLink.length > 0) {
+                        await passwordLink[0].click();
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                }
+            }
+            
             try {
                 await page.waitForSelector('input[type="password"]', { timeout: 30000 });
                 console.log('✅ Campo de contraseña encontrado');
