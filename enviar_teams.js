@@ -1,17 +1,31 @@
 const puppeteer = require('puppeteer');
+const fs = require('fs'); // Necesario para borrar el candado
+const path = require('path');
 
 // --- CONFIGURACIÓN ---
 const messageToSend = process.argv[2]; 
-const chatName = "Ezequiel Mazzarello"; // USUARIO A BUSCAR
+const chatName = "Ezequiel Mazzarello"; 
 const SESSION_DIR = '/home/pptruser/teams_session'; 
-const finalMessage = messageToSend || "🤖 SmartBot v4.2: Prueba con anti-freeze.";
+const finalMessage = messageToSend || "🤖 SmartBot v4.3: Prueba con Auto-Unlock.";
 
 const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
 
 (async () => {
     console.log("========================================");
-    console.log("🤖 INICIANDO SMART-BOT TEAMS v4.2 (Anti-Spinner)");
+    console.log("🤖 INICIANDO SMART-BOT TEAMS v4.3 (Cerrajero)");
     console.log("========================================");
+
+    // 🧹 LIMPIEZA DE CANDADOS VIEJOS (El Fix del Error Actual)
+    try {
+        const lockFile = path.join(SESSION_DIR, 'SingletonLock');
+        if (fs.existsSync(lockFile)) {
+            console.log("🔐 Detectado archivo de bloqueo (SingletonLock). Eliminando para liberar sesión...");
+            fs.unlinkSync(lockFile);
+            console.log("🔓 Sesión liberada con éxito.");
+        }
+    } catch (e) {
+        console.error("⚠️ No se pudo limpiar el lockfile (quizás no existía o falta permiso):", e.message);
+    }
 
     const browser = await puppeteer.launch({
         headless: "new",
@@ -19,8 +33,8 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', // CRÍTICO: Evita crash de memoria en Docker
-            '--disable-gpu',           // CRÍTICO: Teams web lo necesita en headless
+            '--disable-dev-shm-usage', // Mantiene la memoria estable
+            '--disable-gpu',
             '--disable-accelerated-2d-canvas',
             '--window-size=1920,1080',
             '--disable-blink-features=AutomationControlled'
@@ -28,22 +42,19 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
     });
 
     const page = await browser.newPage();
-    
-    // User-Agent moderno para evitar bloqueos
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
     // --- ZONA DE COOKIES ---
-    // IMPORTANTE: Pegá tu JSON de cookies nuevo acá si borraste la sesión
+    // Si ya lograste loguearte antes, esto puede estar vacío.
+    // Si borraste todo, ponelas de nuevo.
     const sessionCookies = [
-        // ... PEGAR COOKIES ACÁ ...
+        // ... TUS COOKIES ...
     ];
 
-    if (sessionCookies.length > 0) {
+    if (sessionCookies.length > 0 && sessionCookies[0].name) {
         try {
-            if (sessionCookies[0].name) {
-                console.log("🍪 Inyectando cookies...");
-                await page.setCookie(...sessionCookies);
-            }
+            console.log("🍪 Inyectando cookies...");
+            await page.setCookie(...sessionCookies);
         } catch (e) { console.error("⚠️ Error cookies:", e.message); }
     }
 
@@ -51,7 +62,7 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
         console.log("🌐 Navegando a teams.live.com...");
         await page.goto('https://teams.live.com/', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // --- CEREBRO CON AUTO-REFRESH ---
+        // --- CEREBRO ---
         let isLoggedIn = false;
         let attempts = 0;
         const maxAttempts = 20; 
@@ -60,7 +71,7 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
             attempts++;
             console.log(`🧠 Estado (Intento ${attempts}/${maxAttempts})...`);
             
-            // 0. ANTES QUE NADA: ¿Me pide bajar la App? ("Use the web app instead")
+            // 0. AVISO DE DESCARGA
             const useWebXpath = "xpath///a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'web')]";
             const useWebBtn = await page.$$(useWebXpath);
             if (useWebBtn.length > 0) {
@@ -68,7 +79,7 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 try { await useWebBtn[0].click(); await delay(5000); } catch(e){}
             }
 
-            // 1. ¿ESTAMOS ADENTRO?
+            // 1. ESTAMOS ADENTRO
             const chatList = await page.$('[role="list"], .chat-list-item, [data-tid="chat-list-item"]');
             if (chatList) {
                 console.log("✅ ¡ESTAMOS ADENTRO!");
@@ -76,7 +87,7 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 break;
             }
 
-            // 2. ¿PORTADA? (Sign in)
+            // 2. PORTADA
             const signInXpath = "xpath///a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'sign in')] | //a[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'iniciar')]";
             const signInBtn = await page.$$(signInXpath);
             if (signInBtn.length > 0) {
@@ -84,11 +95,11 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 try { await signInBtn[0].click(); await delay(5000); continue; } catch (e) {}
             }
 
-            // 3. ¿PASSWORD?
+            // 3. PASSWORD (ERROR)
             const passwordInput = await page.$('input[name="passwd"], input[type="password"]');
-            if (passwordInput) throw new Error("LOGIN_REQUIRED: Pide contraseña. Cookies vencidas.");
+            if (passwordInput) throw new Error("LOGIN_REQUIRED: Pide contraseña.");
 
-            // 4. ¿SELECTOR DE CUENTA?
+            // 4. SELECTOR CUENTA
             const accountTile = await page.$('.table-row, [data-test-id="tile_container"]');
             if (accountTile) {
                 console.log("👀 Eligiendo cuenta...");
@@ -96,7 +107,7 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 await delay(3000); continue;
             }
 
-            // 5. ¿POPUP MANTENER SESIÓN?
+            // 5. MANTENER SESIÓN
             const staySignedIn = await page.$('input[type="submit"][value="Sí"], input[type="submit"][value="Yes"], #idSIButton9');
             if (staySignedIn) {
                 console.log("👀 Aceptando 'Mantener sesión'...");
@@ -104,9 +115,9 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 await delay(3000); continue;
             }
 
-            // 🚨 ESTRATEGIA ANTI-SPINNER (RECARGA)
-            if (attempts === 8) { // A los 40 segundos si sigue cargando
-                console.log("🔄 EL BOT SE QUEDÓ PEGADO CARGANDO. FORZANDO REFRESH (F5)...");
+            // ANTI-SPINNER
+            if (attempts === 8) {
+                console.log("🔄 REFRESH FORZADO (F5)...");
                 await page.reload({ waitUntil: "domcontentloaded" });
                 await delay(5000);
             }
@@ -115,13 +126,12 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
             await delay(5000);
         }
 
-        if (!isLoggedIn) throw new Error("Timeout: No se pudo entrar al chat tras varios intentos.");
+        if (!isLoggedIn) throw new Error("Timeout Login.");
 
-        // --- ENVÍO DE MENSAJE ---
+        // --- ENVÍO ---
         console.log("🔎 Buscando contacto:", chatName);
         await delay(3000); 
 
-        // Selector robusto por texto
         const targetSelector = `xpath///span[contains(text(), '${chatName}')]`;
         
         try {
@@ -133,9 +143,8 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 await chatElements[0].click();
                 
                 console.log("📝 Buscando caja de texto...");
-                // Esperamos el editor y hacemos foco
                 await page.waitForSelector('[contenteditable="true"]', { timeout: 20000 });
-                await delay(1000); // Un respiro para que la UI reaccione
+                await delay(1000);
 
                 console.log("⌨️ Escribiendo...");
                 await page.type('[contenteditable="true"]', finalMessage);
@@ -143,19 +152,19 @@ const delay = (time) => new Promise(resolve => setTimeout(resolve, time));
                 await page.keyboard.press('Enter');
                 
                 console.log("🚀 MENSAJE ENVIADO.");
-                await delay(5000); // Esperar confirmación visual implícita
+                await delay(5000);
             } else {
-                throw new Error("Chat no encontrado en la lista visual.");
+                throw new Error("Chat no encontrado.");
             }
         } catch (e) {
-            throw new Error(`Error enviando mensaje: ${e.message}`);
+            throw new Error(`Error envío: ${e.message}`);
         }
 
     } catch (error) {
         console.error("❌ ERROR FATAL:", error.message);
         try {
-            await page.screenshot({ path: `${SESSION_DIR}/error_debug_v4_2.png`, fullPage: true });
-            console.log("📸 Foto guardada: error_debug_v4_2.png");
+            await page.screenshot({ path: `${SESSION_DIR}/error_debug_v4_3.png`, fullPage: true });
+            console.log("📸 Foto error guardada: error_debug_v4_3.png");
         } catch (e) {}
     } finally {
         await browser.close();
