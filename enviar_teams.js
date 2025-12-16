@@ -63,17 +63,53 @@ const mensaje = `🚨 **Nuevo Anydesk Detectado**\n💻 Equipo: ${pcName}\n🆔 
         // -----------------------------------------------------
         console.log(`👀 Buscando chat: "${GROUP_NAME}"...`);
         
-        // Esperamos que cargue la lista lateral
-        await page.waitForSelector('div[role="listitem"]', { timeout: 60000 });
+        // Esperar a que Teams cargue completamente (varios selectores posibles)
+        console.log('⏳ Esperando que cargue la interfaz de Teams...');
+        await Promise.race([
+            page.waitForSelector('div[role="listitem"]', { timeout: 60000 }),
+            page.waitForSelector('[data-tid="chat-list"]', { timeout: 60000 }),
+            page.waitForSelector('div[role="navigation"]', { timeout: 60000 }),
+            page.waitForSelector('button[aria-label*="Chat"]', { timeout: 60000 })
+        ]).catch(async (err) => {
+            console.log('⚠️ No se detectó la interfaz esperada. URL actual:', page.url());
+            const html = await page.content();
+            console.log('📄 HTML snippet (primeros 500 chars):', html.substring(0, 500));
+            await page.screenshot({ path: '/app/debug_no_interface.png' });
+            throw new Error('Teams no cargó correctamente. Ver screenshot debug_no_interface.png');
+        });
 
-        // Usamos XPath para buscar el TEXTO exacto en la pantalla
-        const target = await page.waitForSelector(`::-p-xpath(//*[contains(text(), "${GROUP_NAME}")])`, { timeout: 10000 });
+        console.log('✅ Interfaz cargada. Buscando chat por texto...');
+        
+        // Estrategia 1: Buscar por XPath usando texto exacto
+        let target = null;
+        try {
+            target = await page.waitForSelector(`::-p-xpath(//*[contains(text(), "${GROUP_NAME}")])`, { timeout: 10000 });
+        } catch (e) {
+            console.log('⚠️ No encontrado con XPath exacto, intentando búsqueda parcial...');
+        }
+
+        // Estrategia 2: Si falla, buscar en todos los elementos visibles
+        if (!target) {
+            const allText = await page.evaluate(() => {
+                return Array.from(document.querySelectorAll('*')).map(el => el.textContent?.trim()).filter(Boolean);
+            });
+            console.log('📋 Textos encontrados en página (primeros 20):', allText.slice(0, 20));
+            
+            // Intenta con click por coordenadas si encuentras el texto
+            const elements = await page.$x(`//*[contains(text(), "${GROUP_NAME}")]`);
+            if (elements.length > 0) {
+                target = elements[0];
+                console.log('✅ Chat encontrado con búsqueda alternativa.');
+            }
+        }
 
         if (target) {
             console.log('✅ Chat encontrado. Haciendo click...');
             await target.click();
+            await new Promise(r => setTimeout(r, 2000)); // Esperar que abra
         } else {
-            throw new Error(`No encontré el chat "${GROUP_NAME}" en la lista.`);
+            await page.screenshot({ path: '/app/debug_chat_not_found.png' });
+            throw new Error(`No encontré el chat "${GROUP_NAME}" en la lista. Ver screenshot debug_chat_not_found.png`);
         }
 
         // -----------------------------------------------------
