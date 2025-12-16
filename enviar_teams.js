@@ -1,27 +1,27 @@
 const puppeteer = require('puppeteer');
 
-// Recibimos el mensaje como argumento
+// Recibimos el mensaje como argumento. Si no hay, usamos uno de prueba.
 const messageToSend = process.argv[2]; 
-const chatName = "AnyDesk Management"; 
+// CAMBIO PARA PRUEBAS: Buscamos tu chat personal
+const chatName = "Ezequiel Mazzarello"; 
+
 const SESSION_DIR = '/home/pptruser/teams_session'; 
 
-if (!messageToSend) {
-  console.log("Modo prueba: Usando mensaje por defecto.");
-}
-const finalMessage = messageToSend || "Prueba de conexión con Cookies";
+// Mensaje por defecto si corrés el script sin argumentos
+const finalMessage = messageToSend || "🤖 Hola Eze, soy el bot probando la inyección de cookies.";
 
 (async () => {
-  console.log("🚀 Iniciando Bot con Inyección de Cookies...");
+  console.log(`🚀 Iniciando Bot para escribirle a: ${chatName}`);
   
   const browser = await puppeteer.launch({
-    headless: "new", 
+    headless: "new", // Ya lo dejamos sin ventana porque usamos cookies
     userDataDir: SESSION_DIR, 
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   const page = await browser.newPage();
 
-  // --- 🍪 ZONA DE COOKIES 🍪 ---
+  // --- 🍪 ZONA DE COOKIES (Tus credenciales) 🍪 ---
   const sessionCookies = [
     {
         "domain": ".live.com",
@@ -257,11 +257,13 @@ const finalMessage = messageToSend || "Prueba de conexión con Cookies";
     await page.goto('https://teams.live.com/', { waitUntil: 'networkidle2', timeout: 90000 });
 
     console.log("Página cargada. Buscando chat...");
-    // Esperamos a que cargue la lista de chats
-    await page.waitForSelector('[role="list"]', { timeout: 60000 }); // Espera genérica a que cargue la UI
+    
+    // Esperamos a que cargue la lista (selector genérico de la UI de Teams)
+    await page.waitForSelector('[role="list"]', { timeout: 60000 }); 
 
+    // Buscamos el chat por el nombre (usamos XPath que es más flexible)
     const chatXpath = `//span[contains(text(), '${chatName}')]`;
-    console.log(`Buscando elemento con texto: ${chatName}`);
+    console.log(`Buscando elemento: ${chatName}`);
     await page.waitForXPath(chatXpath, { timeout: 30000 });
     
     // Hacemos click en el chat
@@ -270,25 +272,25 @@ const finalMessage = messageToSend || "Prueba de conexión con Cookies";
       await chatElements[0].click();
       console.log("Chat clickeado. Esperando editor de texto...");
       
+      // Esperamos al editor
       await page.waitForSelector('[contenteditable="true"]', { timeout: 30000 });
       
       // Escribir el mensaje
       console.log("Escribiendo mensaje...");
       await page.type('[contenteditable="true"]', finalMessage);
       
+      // Enviarlo
       await page.keyboard.press('Enter');
       console.log("✅ MENSAJE ENVIADO CON ÉXITO");
       
       // Esperar un poco para asegurar que salga
       await new Promise(r => setTimeout(r, 5000));
     } else {
-      console.error("❌ No encontré el chat en la lista.");
+      console.error("❌ No encontré el chat en la lista. Chequeá que el nombre sea exacto.");
     }
 
   } catch (error) {
     console.error("❌ Error:", error);
-    // Sacar screenshot si falla para ver qué pasó (opcional, solo si tenés donde verlo)
-    // await page.screenshot({ path: '/app/error.png' });
   } finally {
     await browser.close();
   }
